@@ -1,0 +1,5 @@
+"bddNumber","bddName","analysisTechniqueIdentifier","bddVersion","url","facility","instrument"
+21,"Transmission Electron Microscopy (TEM)","TEM","UA-SIS-XXX, Rev. DRAFT 0.1","https://osiris-rex.atlassian.net/wiki/spaces/SDPD/pages/519077889/BDD+-+Transmission+Electron+Microscopy+TEM","UCB","TitanX"
+21,"Transmission Electron Microscopy (TEM)","TEM","UA-SIS-XXX, Rev. DRAFT 0.1","https://osiris-rex.atlassian.net/wiki/spaces/SDPD/pages/519077889/BDD+-+Transmission+Electron+Microscopy+TEM","UCB","Libra"
+21,"Transmission Electron Microscopy (TEM)","TEM","UA-SIS-XXX, Rev. DRAFT 0.1","https://osiris-rex.atlassian.net/wiki/spaces/SDPD/pages/519077889/BDD+-+Transmission+Electron+Microscopy+TEM","UCB","Tecnai"
+22,"X-ray Absorption Near Edge Structure (XANES)","XANES","UA-SIS-XXX, Rev. DRAFT 0.1","https://osiris-rex.atlassian.net/wiki/spaces/SDPD/pages/519503945/BDD+-+X-ray+Absorption+Near+Edge+Structure+XANES","LBL","ALS 5.3.2.2"
