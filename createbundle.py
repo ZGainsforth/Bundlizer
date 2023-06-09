@@ -25,7 +25,8 @@ bdd = pd.read_csv(os.path.join('Config', 'BDD.csv'))
 people = pd.read_csv(os.path.join('Config', 'People.csv'))
 
 title = st.text_input("Title")
-abstract = st.text_input("Abstract")
+abstract = st.text_area("Abstract")
+st.write("There isn't a field in the bundle yaml for the sample number!")
 
 # BDD
 bddName = st.selectbox("Select BDD", bdd['bddName'].unique())
@@ -165,7 +166,20 @@ for productId, productInfo in productsDict.items():
     for f in productInfo['Files']:
         st.write(f"\t{f}")
         _, ext = os.path.splitext(f)
-        if ext == '.png':
-            plot_png(f)
+        if ext in ['.png', '.jpg', '.jpeg', '.gif']:
+            st.image(f)
         if ext == '.yaml':
             productInfo['yamlContent'] = st.text_area(label=f'{f}:', value=load_textfile(f), key=f)
+        shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
+
+# Zip the resulting raw data + bundle files up.
+rawPlusBundleZip = os.path.join(rawDir, '..', f'{sessionId}')
+shutil.make_archive(rawPlusBundleZip, 'zip', rawDir)
+with open(rawPlusBundleZip+'.zip', 'rb') as f:
+    st.download_button('Download raw data + bundle files', data=f, file_name=f'{sessionId}_plus_raw.zip')
+
+# Zip the resulting bundle files only.
+bundleZip = os.path.join(bundleDir, '..', f'{sessionId}')
+shutil.make_archive(bundleZip, 'zip', bundleDir)
+with open(bundleZip+'.zip', 'rb') as f:
+    st.download_button('Download bundle file only', data=f, file_name=f'{sessionId}.zip')
