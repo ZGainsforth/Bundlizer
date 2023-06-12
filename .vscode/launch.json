@@ -10,7 +10,7 @@
             "type": "python",
             "request": "launch",
             "module": "streamlit",
-            "args": ["run", "${file}"]
+            "args": ["run", "Bundlizer_Overview.py"]
         }
     ]
 }
