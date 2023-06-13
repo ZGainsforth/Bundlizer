@@ -248,15 +248,33 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
         SaveTifStack(TifFileName, Xim[RegionName])
         ProductFiles.append(TifFileName)
 
-        # Save the energy axis.
-        EnergyFileName = os.path.join(PathName, f'{ProductName}.txt')
-        np.savetxt(EnergyFileName, Xim['Energies'])
-        ProductFiles.append(EnergyFileName)
+        # # Save the energy axis.
+        # EnergyFileName = os.path.join(PathName, f'{ProductName}.txt')
+        # np.savetxt(EnergyFileName, Xim['Energies'])
+        # ProductFiles.append(EnergyFileName)
 
         # Now put all the data together to make a the bundle 
         yamlData = {
             "description": "default description",
             "dataComponentType": dataComponentType,
+            "dimensions": [
+                {
+                    "dimension": "X",
+                    "fieldDescription": "X",
+                    "unitOfMeasure": "um",
+                },
+                {
+                    "dimension": "Y",
+                    "fieldDescription": "Y",
+                    "unitOfMeasure": "um",
+                },
+                {
+                    "dimension": "Z",
+                    "fieldDescription": "Z",
+                    "unitOfMeasure": "eV",
+                    "fieldResource": Xim['Energies'].tolist()
+                },
+            ]
         }
         yamlFileName = os.path.join(PathName, f'{ProductName}.yaml')
         # statusOutput(f'Generating yaml file: {yamlFileName}')
