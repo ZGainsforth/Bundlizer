@@ -21,7 +21,7 @@ if 'sessionId' in st.session_state:
     sessionId = st.session_state['sessionId']
 else:
     sessionId = ''
-sessionId = st.text_input("SAMIS Session ID (get one here https://samis.lpl.arizona.edu):", value=sessionId)
+sessionId = st.text_input("SAMIS Session ID (get one here https://samprod.lpl.arizona.edu/sada):", value=sessionId)
 
 if sessionId is '':
     st.stop()
@@ -53,7 +53,7 @@ if uploadFile is not None:
         zip_ref.extractall(rawDir)  # extracts all files into the bundle directory
 
 # Check if there is already a bundle file.
-bundleinfoFileName = os.path.join(bundleDir, f'{sessionId}_bundleinfo.yaml')
+bundleinfoFileName = os.path.join(rawDir, f'{sessionId}_bundleinfo.yaml')
 if os.path.exists(bundleinfoFileName):
     st.write(f'{sessionId}_bundleinfo.yaml was found in the uploaded info.')
     if st.button('Edit bundle'):

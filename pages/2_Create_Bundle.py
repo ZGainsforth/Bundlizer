@@ -102,7 +102,7 @@ data = {
 }
 
 # Define the path for the output file
-bundleinfoFileName = os.path.join(bundleDir, f'{sessionId}_bundleinfo.yaml')
+bundleinfoFileName = os.path.join(rawDir, f'{sessionId}_bundleinfo.yaml')
 
 # Don't process the data until the user says to.
 if not st.button('Process raw data now!'):
