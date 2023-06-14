@@ -10,8 +10,9 @@ infoStr = 'This tool allows you to upload information from an experiment and pro
 'Once you have produced a bundle from your raw data, it can be uploaded directly to SAMIS.  '+\
 'Alternately, you can download the raw data plus bundle files for further editing and analysis.  '+\
 'The directory containing raw data plus bundle files can be re-uploaded and used to produce a final bundle file.  '+\
-'(todo youtube video showing how to use)  '+\
 'The following flow chart helps explain the flow:'
 st.write(infoStr)
 
 st.image('BundlizerFlowChart.png')
+
+st.write('(todo youtube video showing how to use)')
