@@ -5,4 +5,4 @@ This tool allows you to upload information from an experiment and produce a bund
 
 ![](BundlizerFlowChart.png)
 
-(Todo youtube video showing how to use bundlizer.)
+(Todo video showing how to use bundlizer.)
