@@ -3,6 +3,7 @@ import os
 import shutil
 from skimage.io import imread
 import matplotlib.pyplot as plt
+import numpy as np
 
 '''--------------- GENERAL FUNCTIONS ---------------'''
 
@@ -25,6 +26,13 @@ def load_textfile(fileName):
     with open(fileName, 'r') as f:
         fileContents = f.read()
     return fileContents
+
+def numpy_to_yaml(arr):
+    with np.printoptions(linewidth=np.inf):
+        s = np.array2string(arr, separator=', ', formatter={'float': lambda x: str(x)})
+        # remove the brackets []
+        s = s[1:-1]
+    return s
 
 '''--------------- INIT FUNCTIONS ---------------'''
 
