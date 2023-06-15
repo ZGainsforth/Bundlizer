@@ -78,16 +78,49 @@ def ReadXim(XimName):
 
     Energies = np.delete(Energies, 0)
 
+    # Initialize list for storing x and y axis points for each region
+    xAxisRegions = []
+    yAxisRegions = []
+
+    # Extract the x and y axis points for each region
+    pattern = r'PAxis.*?Points = \((.*?)\);.*?QAxis.*?Points = \((.*?)\);'
+    matches = re.findall(pattern, hdr, re.S)
+
+    # Check if the number of matches is the same as the number of regions
+    if len(matches) != NumRegions:
+        print('Mismatch in number of regions detected in header file.')
+        return None
+
+    for match in matches:
+        xAxisPoints = np.fromstring(match[0], dtype=float, sep=', ')
+        yAxisPoints = np.fromstring(match[1], dtype=float, sep=', ')
+
+        # Remove the first element which is the count of points
+        xAxisPoints = np.delete(xAxisPoints, 0)
+        yAxisPoints = np.delete(yAxisPoints, 0)
+
+        xAxisRegions.append(xAxisPoints)
+        yAxisRegions.append(yAxisPoints)
+
     # Put the data into the XimHeader
     Xim = {}
     Xim['Energies'] = Energies
     Xim['NumRegions'] = NumRegions
 
-    # While Axis probably does it, we don't support multiple regions for anything other than a stack.
-    # We can add this in the future.
-    if len(Energies) <= 2 and NumRegions > 1:
-        print ("Multi-region images and maps are not currently supported.")
-        return None
+    # # While Axis probably does it, we don't support multiple regions for anything other than a stack.
+    # # We can add this in the future.
+    # if len(Energies) <= 1 and NumRegions > 1:
+    #     print ("Multi-region images are not currently supported.")
+    #     return None
+
+    # For single region stacks, the numbers go 000, 001, 002, ...
+    if NumRegions == 1:
+        NumberIncrement = 1
+        ExtensionStr = '_a%03d.xim'
+    # For multi region stacks, region 1 goes 0000, 0010, 0020, ... and region 2 is 0001, 0011, 0021, ...
+    else:
+        NumberIncrement = 10
+        ExtensionStr = '_a%04d.xim'
 
     # Three options based on how many energies we have:
     # 1: It's just an image.
@@ -96,35 +129,34 @@ def ReadXim(XimName):
     if len(Energies) == 1:
         # For images, we just load the image.  The stack is rather dull, just one frame.
         Xim['Type'] = 'Image'
-        Xim['Image'] = np.loadtxt(BaseName + '_a.xim', dtype='uint16')
-        Xim['Plot'] = PlotImage(Xim['Image'], AxisName + ': %0.2f eV'%Xim['Energies'][0])
-        Xim['Region1'] = Xim['Image']
+        for n in range(1, NumRegions+1):
+            if NumRegions > 1:
+                Xim[f'Region{n}'] = np.loadtxt(BaseName + '_a%01d.xim'%(n-1), dtype='uint16')
+            # For single region
+            else:
+                Xim[f'Region{n}'] = np.loadtxt(BaseName + '_a.xim', dtype='uint16')
+            Xim[f'Region{n}_Image'] = Xim[f'Region{n}'] 
+            Xim[f'Region{n}_X'] = xAxisRegions[n-1]
+            Xim[f'Region{n}_Y'] = yAxisRegions[n-1]
+            Xim[f'Region{n}_Plot'] = PlotImage(Xim[f'Region{n}'], AxisName + f'_Region{n}: %0.2f eV'%Xim['Energies'][0])
     elif len(Energies) == 2:
         Xim['Type'] = 'Map'
-        PreEdge = np.loadtxt(BaseName + '_a000.xim', dtype='uint16')
-        PostEdge = np.loadtxt(BaseName + '_a001.xim', dtype='uint16')
-        Xim['Region1'] = np.array([PreEdge, PostEdge])
-        Xim['Image'], Xim['Plot'] = PlotMap(PreEdge, PostEdge, Xim['Energies'], AxisName)
+        # Load each region into Xim.
+        for n in range(1, NumRegions+1):
+            PreEdge = np.loadtxt(BaseName + ExtensionStr%(n-1), dtype='uint16')
+            PostEdge = np.loadtxt(BaseName + ExtensionStr%(n-1+NumberIncrement), dtype='uint16')
+            Xim[f'Region{n}'] = np.array([PreEdge, PostEdge])
+            Xim[f'Region{n}_X'] = xAxisRegions[n-1]
+            Xim[f'Region{n}_Y'] = yAxisRegions[n-1]
+            Xim[f'Region{n}_Image'], Xim[f'Region{n}_Plot'] = PlotMap(PreEdge, PostEdge, Xim['Energies'], AxisName)
     else:
         Xim['Type'] = 'Stack'
-
-        # For single region stacks, the numbers go 000, 001, 002, ...
-        if NumRegions == 1:
-            NumberIncrement = 1
-        # For multi region stacks, region 1 goes 0000, 0010, 0020, ... and region 2 is 0001, 0011, 0021, ...
-        else:
-            NumberIncrement = 10
 
         # Load each region into Xim.
         for n in range(1, NumRegions+1):
             # Name this one.
-            RegionName = 'Region%d'%n
-            # Load just the first frame so we can allocate the numpy array with the right dimensions.
-            if NumRegions == 1:
-                ExtensionStr = '_a000.xim'
-            else:
-                ExtensionStr = '_a%04d.xim'%(n-1)
-            FirstFrame = np.loadtxt(BaseName + ExtensionStr, dtype='uint16')
+            # RegionName = 'Region%d'%n
+            FirstFrame = np.loadtxt(BaseName + ExtensionStr%(n-1), dtype='uint16')
 
             # Allocate the numpy array.
             ThisRegion = np.zeros((len(Xim['Energies']), FirstFrame.shape[0], FirstFrame.shape[1]), dtype='uint16')
@@ -134,15 +166,10 @@ def ReadXim(XimName):
             for i in range(1, len(Xim['Energies'])):
                 # Read in one frame and store it.
                 try:
-                    # (i*NumberIncrement+(n-1)) because n-1 gives the 0 based region (region 1 goes 000, then 010, etc...)
-                    # and i*NumberIncrement gives us 010, 020, etc.
-                    if NumRegions == 1:
-                        ExtensionStr = '_a%03d.xim'%(i*NumberIncrement+(n-1))
-                    else:
-                        ExtensionStr = '_a%04d.xim'%(i*NumberIncrement+(n-1))
-                    #ThisRegion[i] = np.loadtxt(BaseName + '_a%03d.xim'%(i*NumberIncrement+(n-1)), dtype='uint16')
                     # We're doing this with pandas read_csv because it is so fast.
-                    t = pd.read_csv(BaseName + ExtensionStr, sep='\t', header=None)
+                    # n-1 gives us the region number, i-1 gives us the frame number.  NumberIncrement gives us the jumps between frames.
+                    # e.g. region 1, frame 1 = 0, region 1, frame 2 = 10, region 2 frame 2 = 11, region 2 frame 3 = 21, etc.
+                    t = pd.read_csv(BaseName + ExtensionStr%((n-1)+(i-1)*NumberIncrement), sep='\t', header=None)
                     # But Tolek has a \t at the end of the line and Pandas reads in a last column of NaNs.  So ditch
                     # the last col.
                     ThisRegion[i] = t.values[:,:-1]
@@ -155,13 +182,17 @@ def ReadXim(XimName):
                     break
 
             # Store it.
-            Xim[RegionName] = ThisRegion
+            # Xim[RegionName] = ThisRegion
+            Xim[f'Region{n}'] = ThisRegion
+            Xim[f'Region{n}_X'] = xAxisRegions[n-1]
+            Xim[f'Region{n}_Y'] = yAxisRegions[n-1]
+            Xim[f'Region{n}_Image'], Xim[f'Region{n}_Plot'] = PlotStack(Xim[f'Region{n}'], Xim['Energies'], AxisName+f'_Region{n}')
 
-            # And generate "pretty images" i.e. thumbnails.
-            ThisAxisName = AxisName
-            if NumRegions > 1:
-                ThisAxisName = AxisName + '_Region%d'%n
-            Xim['Image'+RegionName], Xim['Plot'+RegionName] = PlotStack(Xim[RegionName], Xim['Energies'], AxisName)
+            # # And generate "pretty images" i.e. thumbnails.
+            # ThisAxisName = AxisName
+            # if NumRegions > 1:
+            #     ThisAxisName = AxisName + '_Region%d'%n
+            # Xim['Image'+RegionName], Xim['Plot'+RegionName] = PlotStack(Xim[RegionName], Xim['Energies'], AxisName)
 
     return Xim
 
@@ -202,11 +233,19 @@ def PlotStack(Region, Energies, AxisName):
     # And pass it back out.
     return Sum, im
 
+def NumpyToYaml(arr):
+    with np.printoptions(linewidth=np.inf):
+        s = np.array2string(arr, separator=', ', formatter={'float': lambda x: str(x)})
+        # remove the brackets []
+        s = s[1:-1]
+    return s
+
 def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
     # In the case of STXM, all products are pointed to by a hdr file.
     # Extract the file name.
     FullName, _ = os.path.splitext(fileName)
-    ProductID = os.path.basename(FullName) # This is the ID that matches the raw data source.
+    BaseName = os.path.basename(FullName) # This is the name of the file.
+    _,ProductID = BaseName.split("_") # Get rid of the beamline prefix -- SAMIS requires just a number.
     PathName = os.path.dirname(FullName) # This is the directory containing the file.
 
     Xim = ReadXim(FullName)
@@ -227,62 +266,72 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
             raise ValueError(f"{Xim['Type']} is an invalid data product type.")
     ProductDict = {}
 
+    # the first file is a yaml describing the data collection.
+    ProductName = f'{sessionId}_{dataComponentType}_{ProductID}'
+    yamlData = {
+        "description": "default description",
+        "dataComponentType": dataComponentType,
+    }
+    yamlFileName = os.path.join(PathName, f'{ProductName}.yaml')
+    with open(yamlFileName, 'w') as f:
+        yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
+    ProductDict[ProductName] = yamlFileName
+
     for n in range(1, Xim['NumRegions']+1):
         RegionName = 'Region%d'%n
-        ProductName = f'{sessionId}_{dataComponentType}_{ProductID}_{RegionName}'
+        SubProductName = f'{ProductName}_{RegionName}'
         ProductFiles = [] # We don't know all the files yet.  Append as we go.
 
         # In stacks there is a region name since they often are multi-region.
-        if Xim['Type'] == 'Stack':
-            PlotName = 'Plot'+RegionName
-        else:
-            PlotName = 'Plot'
+        # if Xim['Type'] == 'Image':
+        #     PlotName = 'Plot'
+        # else:
+        PlotName = f'Region{n}_Plot'
 
         # Save a user friendly plot image.
-        FriendlyPlotFileName = os.path.join(PathName, f'{ProductName}.png')
+        FriendlyPlotFileName = os.path.join(PathName, f'{SubProductName}.png')
         Xim[PlotName].save(FriendlyPlotFileName)
         ProductFiles.append(FriendlyPlotFileName)
 
         # Save the raw data as tif.
-        TifFileName = os.path.join(PathName, f'{ProductName}.tif')
+        TifFileName = os.path.join(PathName, f'{SubProductName}.tif')
         SaveTifStack(TifFileName, Xim[RegionName])
         ProductFiles.append(TifFileName)
 
         # # Save the energy axis.
-        # EnergyFileName = os.path.join(PathName, f'{ProductName}.txt')
+        # EnergyFileName = os.path.join(PathName, f'{SubProductName}.txt')
         # np.savetxt(EnergyFileName, Xim['Energies'])
         # ProductFiles.append(EnergyFileName)
 
-        # Now put all the data together to make a the bundle 
+        # Now put all the data together to make a yaml with the metadata 
         yamlData = {
             "description": "default description",
             "dataComponentType": dataComponentType,
             "dimensions": [
                 {
                     "dimension": "X",
-                    "fieldDescription": "X",
+                    "fieldDescription": NumpyToYaml(Xim[f'Region{n}_X']),
                     "unitOfMeasure": "um",
                 },
                 {
                     "dimension": "Y",
-                    "fieldDescription": "Y",
+                    "fieldDescription": NumpyToYaml(Xim[f'Region{n}_Y']),
                     "unitOfMeasure": "um",
                 },
                 {
                     "dimension": "Z",
-                    "fieldDescription": "Z",
+                    "fieldDescription": NumpyToYaml(Xim['Energies']),
                     "unitOfMeasure": "eV",
-                    "fieldResource": Xim['Energies'].tolist()
                 },
             ]
         }
-        yamlFileName = os.path.join(PathName, f'{ProductName}.yaml')
+        yamlFileName = os.path.join(PathName, f'{SubProductName}.yaml')
         # statusOutput(f'Generating yaml file: {yamlFileName}')
         with open(yamlFileName, 'w') as f:
             yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
         ProductFiles.append(yamlFileName)
 
-        ProductDict.update({ProductName: ProductFiles})
+        ProductDict.update({SubProductName: ProductFiles})
 
     return ProductDict
 
@@ -314,5 +363,6 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
     return productsList
 
 if __name__ == '__main__':
+    #preprocess_all_products('/Users/Zack/Desktop/STXM Example/Track 220 W7 STXM 210620')
     preprocess_all_products()
     print ('Done')

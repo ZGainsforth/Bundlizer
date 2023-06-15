@@ -6,7 +6,7 @@
     "configurations": [
 
         {
-            "name": "Python: Module",
+            "name": "Debug Bundlizer",
             "type": "python",
             "request": "launch",
             "module": "streamlit",

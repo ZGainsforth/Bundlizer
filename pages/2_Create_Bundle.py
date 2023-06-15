@@ -39,7 +39,6 @@ people = pd.read_csv(os.path.join('Config', 'People.csv'))
 
 title = st.text_input("Title")
 abstract = st.text_area("Abstract")
-st.write("There isn't a field in the bundle yaml for the sample number!")
 
 # BDD
 bddName = st.selectbox("Select BDD", bdd['bddName'].unique())
@@ -92,14 +91,18 @@ data = {
     ],
     "bddVersion": bddVersion,
     "funding": funding,
-    "fiducialNorthX": fiducialNorthX,
-    "fiducialNorthY": fiducialNorthY,
-    "fiducialEastX": fiducialEastX,
-    "fiducialEastY": fiducialEastY,
-    "fiducialWestX": fiducialWestX,
-    "fiducialWestY": fiducialWestY,
-    "fiducialUnits": fiducialUnits,
 }
+
+if fiducialNorthX is not None:
+    data.update({
+        "fiducialNorthX": fiducialNorthX,
+        "fiducialNorthY": fiducialNorthY,
+        "fiducialEastX": fiducialEastX,
+        "fiducialEastY": fiducialEastY,
+        "fiducialWestX": fiducialWestX,
+        "fiducialWestY": fiducialWestY,
+        "fiducialUnits": fiducialUnits,
+    })
 
 # Define the path for the output file
 bundleinfoFileName = os.path.join(rawDir, f'{sessionId}_bundleinfo.yaml')

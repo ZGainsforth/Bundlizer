@@ -15,4 +15,6 @@ st.write(infoStr)
 
 st.image('BundlizerFlowChart.png')
 
-st.write('(todo youtube video showing how to use)')
+### Todos: 
+# video on how to use.
+# Zip insert files for tiff collection.
