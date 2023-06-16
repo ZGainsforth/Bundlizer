@@ -8,10 +8,12 @@ import pandas as pd
 import re, os, io, gc
 import glob2
 import yaml
+from yaml.representer import SafeRepresenter
 from ncempy.io import dm, ser # Reader for dm3/dm4 files and ser (TIA) files.
 import importlib
 hf = importlib.import_module('helperfuncs', '..')
 from tifffile import imsave as tiffsave
+import json
 
 # For unique product ID's we start a counter.
 productId = 0
@@ -36,24 +38,42 @@ def get_STEM_type(metadata=None):
     # For now, only HAADF.
     return 'HAADF'
 
+def sanitize_dict_for_yaml(data):
+    sanitized_data = {}
+    for k, v in data.items():
+        if isinstance(data, np.ndarray):
+            sanitized_data[k] = hf.numpy_to_yaml(v)
+        elif isinstance(v, bytes):
+            sanitized_data[k] = v.decode('utf-8')
+        else:
+            sanitized_data[k] = v
+    return sanitized_data
+
 def preprocess_STEM(fileName=None, sessionId=None, statusOutput=print, file=None):
     dataComponentType = 'STEMImage'
+    global productId
     productId += 1
 
-    
     # Make a yaml describing this data product.
     productName = f'{sessionId}_{dataComponentType}_{productId:05d}'
     yamlData = {
         "description": "default description",
         "dataComponentType": dataComponentType,
-        "channel": get_STEM_type(metadata=file['metadata'])
+        "channel": get_STEM_type(metadata=file['metadata']),
+        "pixelScaleX": float(file['pixelSize'][0]),
+        "pixelScaleY": float(file['pixelSize'][1]),
+        "pixelUnits": str(file['pixelUnit'][0]),
     }
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
     with open(yamlFileName, 'w') as f:
         yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
 
-    tiffsave(os.path.join(os.path.dirname(fileName), f'{productName}.tif'), file['data'])
+    # Write the supplementary yaml too with all the instrument data.
+    yamlFileName = os.path.join(os.path.dirname(fileName), f'{sessionId}_instrumentMetadata_{productId:05d}.yaml')
+    with open(yamlFileName, 'w') as f:
+        yaml.dump(sanitize_dict_for_yaml(file['metadata']), f, default_flow_style=False, sort_keys=False)
 
+    tiffsave(os.path.join(os.path.dirname(fileName), f'{productName}.tif'), file['data'])
 
     return
 
@@ -190,5 +210,6 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
 if __name__ == '__main__':
     #preprocess_all_products('/Users/Zack/Desktop/STXM Example/Track 220 W7 STXM 210620')
     # preprocess_all_products()
-    preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
+    # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
+    preprocess_one_product(fileName='/Users/Zack/Desktop/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
     print ('Done')
