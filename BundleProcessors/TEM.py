@@ -12,7 +12,8 @@ from yaml.representer import SafeRepresenter
 from ncempy.io import dm, ser # Reader for dm3/dm4 files and ser (TIA) files.
 import importlib
 hf = importlib.import_module('helperfuncs', '..')
-from tifffile import imsave as tiffsave
+from tifffile import imwrite, TiffWriter
+# from tifffile import imsave as tiffsave
 import json
 
 # For unique product ID's we start a counter.
@@ -73,7 +74,25 @@ def preprocess_STEM(fileName=None, sessionId=None, statusOutput=print, file=None
     with open(yamlFileName, 'w') as f:
         yaml.dump(sanitize_dict_for_yaml(file['metadata']), f, default_flow_style=False, sort_keys=False)
 
-    tiffsave(os.path.join(os.path.dirname(fileName), f'{productName}.tif'), file['data'])
+    metadata={
+        'axes': 'YX',
+        'PixelType': 'float32',
+        'BigEndian': False,
+        'SizeX': file['data'].shape[0],
+        'SizeY': file['data'].shape[1],
+        'PhysicalSizeX': 0.1,
+        'PhysicalSizeXUnit': 'nm',
+        # 'PhysicalSizeXUnit': 'µm',
+        'PhysicalSizeY': 0.1,
+        'PhysicalSizeYUnit': 'nm',
+        # 'PhysicalSizeYUnit': 'µm',
+    }
+    metadata.update(sanitize_dict_for_yaml(file['metadata']))
+
+    with TiffWriter(os.path.join(os.path.dirname(fileName), f'{productName}.ome.tif')) as tif:
+        tif.save(file['data'][:,:].astype('float32'), photometric='minisblack', metadata=metadata)
+        # tif.save(file['data'][np.newaxis,:,:].astype('float32'), photometric='minisblack', metadata=metadata)
+        # tiffsave(os.path.join(os.path.dirname(fileName), f'{productName}.tif'), file['data'], metadata=sanitize_dict_for_yaml(file['metadata']))
 
     return
 
@@ -211,5 +230,5 @@ if __name__ == '__main__':
     #preprocess_all_products('/Users/Zack/Desktop/STXM Example/Track 220 W7 STXM 210620')
     # preprocess_all_products()
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
-    preprocess_one_product(fileName='/Users/Zack/Desktop/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
+    preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
     print ('Done')
