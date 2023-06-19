@@ -39,17 +39,6 @@ def get_STEM_type(metadata=None):
     # For now, only HAADF.
     return 'HAADF'
 
-def sanitize_dict_for_yaml(data):
-    sanitized_data = {}
-    for k, v in data.items():
-        if isinstance(data, np.ndarray):
-            sanitized_data[k] = hf.numpy_to_yaml(v)
-        elif isinstance(v, bytes):
-            sanitized_data[k] = v.decode('utf-8')
-        else:
-            sanitized_data[k] = v
-    return sanitized_data
-
 def preprocess_STEM(fileName=None, sessionId=None, statusOutput=print, file=None):
     dataComponentType = 'STEMImage'
     global productId
@@ -72,7 +61,7 @@ def preprocess_STEM(fileName=None, sessionId=None, statusOutput=print, file=None
     # Write the supplementary yaml too with all the instrument data.
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{sessionId}_instrumentMetadata_{productId:05d}.yaml')
     with open(yamlFileName, 'w') as f:
-        yaml.dump(sanitize_dict_for_yaml(file['metadata']), f, default_flow_style=False, sort_keys=False)
+        yaml.dump(hf.sanitize_dict_for_yaml(file['metadata']), f, default_flow_style=False, sort_keys=False)
 
     metadata={
         'axes': 'YX',
@@ -80,19 +69,21 @@ def preprocess_STEM(fileName=None, sessionId=None, statusOutput=print, file=None
         'BigEndian': False,
         'SizeX': file['data'].shape[0],
         'SizeY': file['data'].shape[1],
-        'PhysicalSizeX': 0.1,
-        'PhysicalSizeXUnit': 'nm',
+        'PhysicalSizeX': float(file['pixelSize'][0]), # Pixels/unit
+        'PhysicalSizeXUnit': str(file['pixelUnit'][0]),
         # 'PhysicalSizeXUnit': 'µm',
-        'PhysicalSizeY': 0.1,
-        'PhysicalSizeYUnit': 'nm',
+        'PhysicalSizeY': float(file['pixelSize'][1]), # Pixels/unit
+        'PhysicalSizeYUnit': str(file['pixelUnit'][0]),
         # 'PhysicalSizeYUnit': 'µm',
     }
-    metadata.update(sanitize_dict_for_yaml(file['metadata']))
+    metadata.update(hf.sanitize_dict_for_yaml(file['metadata']))
+    resolution = hf.ome_to_resolution_cm(metadata)
 
     with TiffWriter(os.path.join(os.path.dirname(fileName), f'{productName}.ome.tif')) as tif:
-        tif.save(file['data'][:,:].astype('float32'), photometric='minisblack', metadata=metadata)
+        tif.write(file['data'][:,:].astype('float32'), photometric='minisblack', metadata=metadata,
+                 resolution=resolution, resolutionunit='CENTIMETER')
         # tif.save(file['data'][np.newaxis,:,:].astype('float32'), photometric='minisblack', metadata=metadata)
-        # tiffsave(os.path.join(os.path.dirname(fileName), f'{productName}.tif'), file['data'], metadata=sanitize_dict_for_yaml(file['metadata']))
+        # tiffsave(os.path.join(os.path.dirname(fileName), f'{productName}.tif'), file['data'], metadata=hf.sanitize_dict_for_yaml(file['metadata']))
 
     return
 
@@ -230,5 +221,7 @@ if __name__ == '__main__':
     #preprocess_all_products('/Users/Zack/Desktop/STXM Example/Track 220 W7 STXM 210620')
     # preprocess_all_products()
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
-    preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
+    # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
+    # preprocess_one_product(fileName='/Users/Zack/Desktop/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
+    preprocess_one_product(fileName='/Users/Zack/Desktop/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0005.dm3', sessionId=314, statusOutput=print)
     print ('Done')

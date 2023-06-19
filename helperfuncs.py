@@ -34,6 +34,38 @@ def numpy_to_yaml(arr):
         s = s[1:-1]
     return s
 
+def sanitize_dict_for_yaml(data):
+    sanitized_data = {}
+    for k, v in data.items():
+        if isinstance(data, np.ndarray):
+            sanitized_data[k] = hf.numpy_to_yaml(v)
+        elif isinstance(v, bytes):
+            sanitized_data[k] = v.decode('utf-8')
+        else:
+            sanitized_data[k] = v
+    return sanitized_data
+
+
+# OME-TIF stores image resolution as a unit, and each pixel is no many units across.
+# TIF resolution tags use pixels/cm so we need to convert whatever units we have to px/cm.
+def ome_to_resolution_cm(metadata):
+    match metadata['PhysicalSizeXUnit']:
+        case 'A' | 'Å':
+            scale = 1e-8
+        case 'nm':
+            scale = 1e-7
+        case 'um' | 'µm':
+            scale = 1e-4
+        case 'mm':
+            scale = 0.1 
+        case 'cm':
+            scale = 1
+        case 'm':
+            scale = 0.01
+    xval = scale/metadata['PhysicalSizeX']
+    yval = scale/metadata['PhysicalSizeY']
+    return (xval, yval)
+        
 '''--------------- INIT FUNCTIONS ---------------'''
 
 # We want to create directories for processing data.
