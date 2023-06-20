@@ -41,6 +41,8 @@ def sanitize_dict_for_yaml(data):
             sanitized_data[k] = hf.numpy_to_yaml(v)
         elif isinstance(v, bytes):
             sanitized_data[k] = v.decode('utf-8')
+        elif isinstance(v, dict):
+            sanitized_data[k] = sanitize_dict_for_yaml(v)
         else:
             sanitized_data[k] = v
     return sanitized_data
@@ -51,13 +53,13 @@ def sanitize_dict_for_yaml(data):
 def ome_to_resolution_cm(metadata):
     match metadata['PhysicalSizeXUnit']:
         case 'A' | 'Å':
-            scale = 1e-8
+            scale = 1e8
         case 'nm':
-            scale = 1e-7
+            scale = 1e7
         case 'um' | 'µm':
-            scale = 1e-4
+            scale = 1e4
         case 'mm':
-            scale = 0.1 
+            scale = 10 
         case 'cm':
             scale = 1
         case 'm':
