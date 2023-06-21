@@ -43,7 +43,7 @@ def sanitize_dict_for_yaml(data):
         k = re.sub(r'\s+', '_', k) # And no whitespace.
         # Clean up the values.
         if isinstance(data, np.ndarray):
-            sanitized_data[k] = hf.numpy_to_yaml(v)
+            sanitized_data[k] = numpy_to_yaml(v)
         elif isinstance(v, bytes):
             sanitized_data[k] = v.decode('utf-8')
         elif isinstance(v, dict):
@@ -57,11 +57,11 @@ def sanitize_dict_for_yaml(data):
 # TIF resolution tags use pixels/cm so we need to convert whatever units we have to px/cm.
 def ome_to_resolution_cm(metadata):
     match metadata['PhysicalSizeXUnit']:
-        case 'A' | 'Å':
+        case 'A' | 'Å' | '1/A' | '1/Å':
             scale = 1e8
-        case 'nm':
+        case 'nm' | '1/nm':
             scale = 1e7
-        case 'um' | 'µm':
+        case 'um' | 'µm' | '1/um' | '1/µm':
             scale = 1e4
         case 'mm':
             scale = 10 

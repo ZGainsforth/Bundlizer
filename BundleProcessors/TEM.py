@@ -6,6 +6,7 @@ import numpy as np
 import hyperspy.api as hs
 import pandas as pd
 import re, os, io, gc
+import shutil
 import glob2
 import yaml
 from yaml.representer import SafeRepresenter
@@ -40,17 +41,22 @@ def get_STEM_type(metadata=None):
     return 'HAADF'
 
 def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_metadata=None, addl_metadata=None):
+    global productId
+    productId += 1
+
+    productName = f"{sessionId}_{core_metadata['dataComponentType']}_{productId:05d}"
+    statusOutput(f'Producing data product {productName}.')
+
     # Make a yaml describing this data product.
     yamlData = { 
         "description": core_metadata['description'],
         "dataComponentType": core_metadata['dataComponentType'],
-        "channel": core_metadata['dataComponentType'],
+        "channel": core_metadata['channel'],
         "pixelScaleX": core_metadata['PhysicalSizeX'],
         "pixelScaleY": core_metadata['PhysicalSizeY'],
         "pixelUnits": core_metadata['PhysicalSizeXUnit'],
     }
-    productName = f"{sessionId}_{core_metadata['dataComponentType']}_{core_metadata['productId']:05d}"
-    yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
+    yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.ome.yaml')
     with open(yamlFileName, 'w') as f:
         yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
 
@@ -71,22 +77,25 @@ def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_
     resolution = hf.ome_to_resolution_cm(ome_metadata)
 
     with TiffWriter(os.path.join(os.path.dirname(fileName), f'{productName}.ome.tif')) as tif:
-        tif.write(img, photometric='minisblack', metadata=ome_metadata,
-                 resolution=resolution, resolutionunit='CENTIMETER')
+        tif.write(img, photometric='minisblack', metadata=ome_metadata, resolution=resolution, resolutionunit='CENTIMETER')
 
     # Write the supplementary yaml too with all the instrument data.
-    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{core_metadata['productId']:05d}.yaml")
+    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.yaml")
     with open(yamlFileName, 'w') as f:
         yaml.dump(ome_metadata, f, default_flow_style=False, sort_keys=False)
 
-    return
+    # If this is an electron diffraction pattern, then there is supposed to be a PDF for the calibration.
+    if core_metadata['dataComponentType'] == 'TEMPatternsImage':
+        calibrationFileName = os.path.splitext(fileName)[0] + ".pdf"
+        try:
+            shutil.copyfile(calibrationFileName, f"{sessionId}_calibrationFile_{productId:05d}.ome.pdf")
+        except Exception as e:
+            statusOutput(f'Could not find calibration file {calibrationFileName}.  Bundle format will not be valid.')
+
+    return productName
 
 def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None):
-    global productId
-    productId += 1
-
     core_metadata = { 
-        "productId": productId,
         "description": f'{os.path.basename(fileName)}',
         "dataComponentType": 'STEMImage',
         "channel": get_STEM_type(metadata=file['metadata']),
@@ -96,52 +105,27 @@ def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None)
         "PhysicalSizeYUnit": str(file['pixelUnit'][0]),
     }
 
-    write_TEM(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file['data'][:,:].astype('float32'), core_metadata=core_metadata, addl_metadata=file['metadata'])
-    return
+    return write_TEM(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file['data'][:,:].astype('float32'), core_metadata=core_metadata, addl_metadata=file['metadata'])
 
 def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None):
-    dataComponentType = 'TEMImage'
-    global productId
-    productId += 1
+    if '/' in file.axes_manager['y'].units:
+        dataComponentType = 'TEMPatternsImage'
+        channel = ''
+    else:
+        dataComponentType = 'TEMImage'
+        channel = 'TEM'
 
-    # Make a yaml describing this data product.
-    productName = f'{sessionId}_{dataComponentType}_{productId:05d}'
-    yamlData = {
-        "description": "default description",
+    core_metadata = { 
+        "description": f'{os.path.basename(fileName)}',
         "dataComponentType": dataComponentType,
-        "channel": 'TEM',
-        "pixelScaleX": float(file.axes_manager['x'].scale),
-        "pixelScaleY": float(file.axes_manager['y'].scale),
-        "pixelUnits": str(file.axes_manager['x'].units),
+        "channel": channel,
+        "PhysicalSizeX": float(file.axes_manager['x'].scale),
+        "PhysicalSizeXUnit": file.axes_manager['x'].units,
+        "PhysicalSizeY": float(file.axes_manager['y'].scale),
+        "PhysicalSizeYUnit": file.axes_manager['y'].units,
     }
-    yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
-    with open(yamlFileName, 'w') as f:
-        yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
 
-    # Write the supplementary yaml too with all the instrument data.
-    yamlFileName = os.path.join(os.path.dirname(fileName), f'{sessionId}_instrumentMetadata_{productId:05d}.yaml')
-    with open(yamlFileName, 'w') as f:
-        yaml.dump(hf.sanitize_dict_for_yaml(file.metadata.as_dictionary()), f, default_flow_style=False, sort_keys=False)
-
-    metadata={
-        'axes': 'YX',
-        'PixelType': 'float32',
-        'BigEndian': False,
-        'SizeX': file.data.shape[0],
-        'SizeY': file.data.shape[1],
-        'PhysicalSizeX': yamlData['pixelScaleX'], # Pixels/unit
-        'PhysicalSizeXUnit': yamlData['pixelUnits'],
-        'PhysicalSizeY': yamlData['pixelScaleY'], # Pixels/unit
-        'PhysicalSizeYUnit': yamlData['pixelUnits'],
-    }
-    metadata.update(hf.sanitize_dict_for_yaml(file.metadata.as_dictionary()))
-    resolution = hf.ome_to_resolution_cm(metadata)
-
-    with TiffWriter(os.path.join(os.path.dirname(fileName), f'{productName}.ome.tif')) as tif:
-        tif.write(file.data[:,:].astype('float32'), photometric='minisblack', metadata=metadata,
-                 resolution=resolution, resolutionunit='CENTIMETER')
-
-    return
+    return write_TEM(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file.data.astype('float32'), core_metadata=core_metadata, addl_metadata=file.metadata.as_dictionary())
 
 def preprocess_EDSCube(fileName=None, sessionId=None, statusOutput=print, file=None):
     return
@@ -157,31 +141,28 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
         case '.dm3' | '.dm4':
             file = hs.load(fileName)
             fileType = file.metadata.Acquisition_instrument.TEM.acquisition_mode
-            preprocess_dm(fileName, sessionId, statusOutput, file)
+            return preprocess_dm(fileName, sessionId, statusOutput, file)
         case '.ser':
             file = ser.serReader(fileName)
             fileType = get_image_type(file['metadata'])
-            preprocess_ser(fileName, sessionId, statusOutput, file)
+            return preprocess_ser(fileName, sessionId, statusOutput, file)
         case '.bcf':
             HAADF, EDS = hs.load(fileName)
             fileType = 'EDSCube'
+            return 'cube'
         case _:
             raise ValueError(f"{ext} is an invalid data product type.")
-
-    # match fileType:
-    #     case 'STEM':
-    #         preprocess_STEM(fileName, sessionId, statusOutput, file)
-    #     case 'TEM':
-    #         preprocess_TEM(fileName, sessionId, statusOutput, file)
-    #     case 'EDSCube':
-    #         preprocess_EDSCube(fileName, sessionId, statusOutput, file)
 
 def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, statusProgress=None):
     # The user is telling us a directory which contains raw products from this instrument.
     if dirName is None:
         dirName =  os.getcwd()
     # On STXM, all data stacks of all types are identified by .hdr files.
-    rawFiles = glob2.glob(os.path.join(dirName, '**', '*.hdr'))
+    rawFiles = []
+    for ext in raw_extensions:
+        rawFiles.extend(glob2.glob(os.path.join(dirName, '**', f'*.{ext}')))
+    # rawFiles = rawFiles.sorted()
+
     productsList = {}
     for i, f in enumerate(rawFiles):
         try:
@@ -204,12 +185,12 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
     return productsList
 
 if __name__ == '__main__':
-    #preprocess_all_products('/Users/Zack/Desktop/STXM Example/Track 220 W7 STXM 210620')
     # preprocess_all_products()
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
-    # tempdir = '/Users/Zack/Desktop' # Mac
-    tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
-    preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser'), sessionId=314, statusOutput=print)
+    tempdir = '/Users/Zack/Desktop' # Mac
+    # tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
+    preprocess_all_products(os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer'))
+    # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser'), sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0005.dm3'), sessionId=314, statusOutput=print)
     print ('Done')
