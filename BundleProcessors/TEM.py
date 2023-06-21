@@ -39,55 +39,67 @@ def get_STEM_type(metadata=None):
     # For now, only HAADF.
     return 'HAADF'
 
-def preprocess_STEM(fileName=None, sessionId=None, statusOutput=print, file=None):
-    dataComponentType = 'STEMImage'
-    global productId
-    productId += 1
-
+def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_metadata=None, addl_metadata=None):
     # Make a yaml describing this data product.
-    productName = f'{sessionId}_{dataComponentType}_{productId:05d}'
-    yamlData = {
-        "description": "default description",
-        "dataComponentType": dataComponentType,
-        "channel": get_STEM_type(metadata=file['metadata']),
-        "pixelScaleX": float(file['pixelSize'][0]),
-        "pixelScaleY": float(file['pixelSize'][1]),
-        "pixelUnits": str(file['pixelUnit'][0]),
+    yamlData = { 
+        "description": core_metadata['description'],
+        "dataComponentType": core_metadata['dataComponentType'],
+        "channel": core_metadata['dataComponentType'],
+        "pixelScaleX": core_metadata['PhysicalSizeX'],
+        "pixelScaleY": core_metadata['PhysicalSizeY'],
+        "pixelUnits": core_metadata['PhysicalSizeXUnit'],
     }
+    productName = f"{sessionId}_{core_metadata['dataComponentType']}_{core_metadata['productId']:05d}"
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
     with open(yamlFileName, 'w') as f:
         yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
 
-    # Write the supplementary yaml too with all the instrument data.
-    yamlFileName = os.path.join(os.path.dirname(fileName), f'{sessionId}_instrumentMetadata_{productId:05d}.yaml')
-    with open(yamlFileName, 'w') as f:
-        yaml.dump(hf.sanitize_dict_for_yaml(file['metadata']), f, default_flow_style=False, sort_keys=False)
-
-    metadata={
+    ome_metadata={
         'axes': 'YX',
         'PixelType': 'float32',
         'BigEndian': False,
-        'SizeX': file['data'].shape[0],
-        'SizeY': file['data'].shape[1],
-        'PhysicalSizeX': float(file['pixelSize'][0]), # Pixels/unit
-        'PhysicalSizeXUnit': str(file['pixelUnit'][0]),
-        # 'PhysicalSizeXUnit': 'µm',
-        'PhysicalSizeY': float(file['pixelSize'][1]), # Pixels/unit
-        'PhysicalSizeYUnit': str(file['pixelUnit'][0]),
-        # 'PhysicalSizeYUnit': 'µm',
+        'SizeX': img.shape[0],
+        'SizeY': img.shape[1],
+        'PhysicalSizeX': core_metadata['PhysicalSizeX'], # Pixels/unit
+        'PhysicalSizeXUnit': core_metadata['PhysicalSizeXUnit'],
+        'PhysicalSizeY': core_metadata['PhysicalSizeY'], # Pixels/unit
+        'PhysicalSizeYUnit': core_metadata['PhysicalSizeYUnit'],
     }
-    metadata.update(hf.sanitize_dict_for_yaml(file['metadata']))
-    resolution = hf.ome_to_resolution_cm(metadata)
+    # Add all the metadata here so it is all embedded in the OME XML header.
+    ome_metadata.update(hf.sanitize_dict_for_yaml(core_metadata))
+    ome_metadata.update(hf.sanitize_dict_for_yaml(addl_metadata))
+    resolution = hf.ome_to_resolution_cm(ome_metadata)
 
     with TiffWriter(os.path.join(os.path.dirname(fileName), f'{productName}.ome.tif')) as tif:
-        tif.write(file['data'][:,:].astype('float32'), photometric='minisblack', metadata=metadata,
+        tif.write(img, photometric='minisblack', metadata=ome_metadata,
                  resolution=resolution, resolutionunit='CENTIMETER')
-        # tif.save(file['data'][np.newaxis,:,:].astype('float32'), photometric='minisblack', metadata=metadata)
-        # tiffsave(os.path.join(os.path.dirname(fileName), f'{productName}.tif'), file['data'], metadata=hf.sanitize_dict_for_yaml(file['metadata']))
+
+    # Write the supplementary yaml too with all the instrument data.
+    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{core_metadata['productId']:05d}.yaml")
+    with open(yamlFileName, 'w') as f:
+        yaml.dump(ome_metadata, f, default_flow_style=False, sort_keys=False)
 
     return
 
-def preprocess_TEM(fileName=None, sessionId=None, statusOutput=print, file=None):
+def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None):
+    global productId
+    productId += 1
+
+    core_metadata = { 
+        "productId": productId,
+        "description": f'{os.path.basename(fileName)}',
+        "dataComponentType": 'STEMImage',
+        "channel": get_STEM_type(metadata=file['metadata']),
+        "PhysicalSizeX": float(file['pixelSize'][0]),
+        "PhysicalSizeXUnit": str(file['pixelUnit'][1]),
+        "PhysicalSizeY": float(file['pixelSize'][1]),
+        "PhysicalSizeYUnit": str(file['pixelUnit'][0]),
+    }
+
+    write_TEM(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file['data'][:,:].astype('float32'), core_metadata=core_metadata, addl_metadata=file['metadata'])
+    return
+
+def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None):
     dataComponentType = 'TEMImage'
     global productId
     productId += 1
@@ -145,24 +157,24 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
         case '.dm3' | '.dm4':
             file = hs.load(fileName)
             fileType = file.metadata.Acquisition_instrument.TEM.acquisition_mode
-            # file = dm.dmReader(fileName, verbose=True)
-            # fileType = get_image_type(file['metadata'])
+            preprocess_dm(fileName, sessionId, statusOutput, file)
         case '.ser':
             file = ser.serReader(fileName)
             fileType = get_image_type(file['metadata'])
+            preprocess_ser(fileName, sessionId, statusOutput, file)
         case '.bcf':
             HAADF, EDS = hs.load(fileName)
             fileType = 'EDSCube'
         case _:
             raise ValueError(f"{ext} is an invalid data product type.")
 
-    match fileType:
-        case 'STEM':
-            preprocess_STEM(fileName, sessionId, statusOutput, file)
-        case 'TEM':
-            preprocess_TEM(fileName, sessionId, statusOutput, file)
-        case 'EDSCube':
-            preprocess_EDSCube(fileName, sessionId, statusOutput, file)
+    # match fileType:
+    #     case 'STEM':
+    #         preprocess_STEM(fileName, sessionId, statusOutput, file)
+    #     case 'TEM':
+    #         preprocess_TEM(fileName, sessionId, statusOutput, file)
+    #     case 'EDSCube':
+    #         preprocess_EDSCube(fileName, sessionId, statusOutput, file)
 
 def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, statusProgress=None):
     # The user is telling us a directory which contains raw products from this instrument.
@@ -196,6 +208,8 @@ if __name__ == '__main__':
     # preprocess_all_products()
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
-    # preprocess_one_product(fileName='/Users/Zack/Desktop/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
-    preprocess_one_product(fileName='/Users/Zack/Desktop/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0005.dm3', sessionId=314, statusOutput=print)
+    # tempdir = '/Users/Zack/Desktop' # Mac
+    tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
+    preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser'), sessionId=314, statusOutput=print)
+    # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0005.dm3'), sessionId=314, statusOutput=print)
     print ('Done')

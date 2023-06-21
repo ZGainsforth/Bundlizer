@@ -1,5 +1,5 @@
 import streamlit as st
-import os
+import os, re
 import shutil
 from skimage.io import imread
 import matplotlib.pyplot as plt
@@ -37,6 +37,11 @@ def numpy_to_yaml(arr):
 def sanitize_dict_for_yaml(data):
     sanitized_data = {}
     for k, v in data.items():
+        # Clean up the key name so it has no spaces or brackets.
+        k = k.replace(' []', '') # If there are empty brackets at the end we just get rid of them.
+        k = k.replace('[', '_').replace(']', '') # Filled brackets get changed with a preceding dunderscore.
+        k = re.sub(r'\s+', '_', k) # And no whitespace.
+        # Clean up the values.
         if isinstance(data, np.ndarray):
             sanitized_data[k] = hf.numpy_to_yaml(v)
         elif isinstance(v, bytes):
