@@ -127,7 +127,7 @@ sanitizeRegex = r"\s+|-|\." # selects for any whitespace, dash or period.
 instrumentModuleName = f"BundleProcessors.{re.sub(sanitizeRegex, '_', analysisTechniqueIdentifier)}.{re.sub(sanitizeRegex, '_', instrumentName)}" 
 instrumentProcessor = importlib.import_module(instrumentModuleName)
 instrumentProcessor = importlib.reload(instrumentProcessor)
-_ = instrumentProcessor.preprocess_all_products(rawDir, sessionId=sessionId, statusOutput=nuke_text, statusProgress=instrumentProgress)
+instrumentProcessor.preprocess_all_products(rawDir, sessionId=sessionId, statusOutput=nuke_text, statusProgress=instrumentProgress)
 
 # Now move to the next page to view the results.
 switch_page('edit bundle')
