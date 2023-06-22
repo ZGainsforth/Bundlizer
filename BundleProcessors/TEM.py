@@ -70,6 +70,7 @@ def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_
         'PhysicalSizeXUnit': core_metadata['PhysicalSizeXUnit'],
         'PhysicalSizeY': core_metadata['PhysicalSizeY'], # Pixels/unit
         'PhysicalSizeYUnit': core_metadata['PhysicalSizeYUnit'],
+        'ranges': [0.0,1.0],
         }
     # Add all the metadata here so it is all embedded in the OME XML header.
     ome_metadata.update(hf.sanitize_dict_for_yaml(core_metadata))
@@ -79,21 +80,26 @@ def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_
     with TiffWriter(os.path.join(os.path.dirname(fileName), f'{productName}.ome.tif')) as tif:
         mean = np.mean(img)
         std = np.std(img)
-        minValTag = (340,   # 280=MinSampleValue TIFF tag.  See https://www.loc.gov/preservation/digital/formats/content/tiff_tags.shtml
+        minValTag = (280,   # 280=MinSampleValue TIFF tag.  See https://www.loc.gov/preservation/digital/formats/content/tiff_tags.shtml
                     11,     # dtype float32 
                     1,      # one value in the tag.
-                    mean-1,    # What the value is.
-                    True,   # Write it to the first page of the Tiff only.
+                    mean-std,    # What the value is.
+                    False,   # Write it to the first page of the Tiff only.
                     )
-        maxValTag = (341, 11, 1, mean+1, True) # MaxSampleValue TIFF tag.
-        displayRangeTag = ('DisplayRange', 11, 2, (mean-1,mean+1), True)
+        maxValTag = (281, 11, 1, mean+std, False) # MaxSampleValue TIFF tag.
         tif.write(img, photometric='minisblack', metadata=ome_metadata, resolution=resolution, resolutionunit='CENTIMETER', extratags=[minValTag, maxValTag])
-        # tif.pages[0].tags['DisplayRange'] = (0,1)
 
-    # Write the supplementary yaml too with all the instrument data.
-    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.yaml")
+    # Write the supplementary yaml+txt too with all the instrument data.
+    # Hint: the txt file is a yaml, but the yaml pointing to the metadata has to be the BDD yaml only, no extra keys.
+    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.txt")
     with open(yamlFileName, 'w') as f:
         yaml.dump(ome_metadata, f, default_flow_style=False, sort_keys=False)
+    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.yaml")
+    with open(yamlFileName, 'w') as f:
+        suppYaml = {"description": core_metadata['description'],
+                    "supDocType": core_metadata['dataComponentType'],
+                    "associatedFiles": f'{sessionId}_instrumentMetadata_{productId:05d}.ome.txt'}
+        yaml.dump(suppYaml, f, default_flow_style=False, sort_keys=False)
 
     # If this is an electron diffraction pattern, then there is supposed to be a PDF for the calibration.
     if core_metadata['dataComponentType'] == 'TEMPatternsImage':
@@ -101,13 +107,16 @@ def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_
         try:
             shutil.copyfile(calibrationFileName, f"{sessionId}_calibrationFile_{productId:05d}.ome.pdf")
         except Exception as e:
-            statusOutput(f'Could not find calibration file {calibrationFileName}.  Bundle format will not be valid.')
+            statusOutput(f'Could not find calibration file {calibrationFileName}.')
 
     return
 
-def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None):
+def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None, samisData=None):
+    # Get any information in the user's csv for SAMIS.
+    samisDict = hf.samis_dict_for_this_file(samisData, fileName, statusOutput)
+    description = samisDict.get('description', '')
     core_metadata = { 
-        "description": f'{os.path.basename(fileName)}',
+        "description": f"{os.path.basename(fileName)}: {description}" if description else os.path.basename(fileName),
         "dataComponentType": 'STEMImage',
         "channel": get_STEM_type(metadata=file['metadata']),
         "PhysicalSizeX": float(file['pixelSize'][0]),
@@ -115,11 +124,13 @@ def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None)
         "PhysicalSizeY": float(file['pixelSize'][1]),
         "PhysicalSizeYUnit": str(file['pixelUnit'][0]),
         }
+    # Add any metadata from samisData for this product.
+    core_metadata.update(hf.sanitize_dict_for_yaml(samisDict))
 
     write_TEM(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file['data'][:,:].astype('float32'), core_metadata=core_metadata, addl_metadata=file['metadata'])
     return
 
-def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None):
+def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, samisData=None):
     if '/' in file.axes_manager['y'].units:
         dataComponentType = 'TEMPatternsImage'
         channel = ''
@@ -143,7 +154,7 @@ def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None):
 def preprocess_EDSCube(fileName=None, sessionId=None, statusOutput=print, file=None):
     return
 
-def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
+def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print, samisData=None):
     # In the case of STXM, all products are pointed to by a hdr file.
     # Extract the file name.
     fullName, ext = os.path.splitext(fileName)
@@ -153,15 +164,12 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
     match ext:
         case '.dm3' | '.dm4':
             file = hs.load(fileName)
-            fileType = file.metadata.Acquisition_instrument.TEM.acquisition_mode
-            preprocess_dm(fileName, sessionId, statusOutput, file)
+            preprocess_dm(fileName, sessionId, statusOutput, file, samisData=samisData)
         case '.ser':
             file = ser.serReader(fileName)
-            fileType = get_image_type(file['metadata'])
-            preprocess_ser(fileName, sessionId, statusOutput, file)
+            preprocess_ser(fileName, sessionId, statusOutput, file, samisData=samisData)
         case '.bcf':
             HAADF, EDS = hs.load(fileName)
-            fileType = 'EDSCube'
         case _:
             raise ValueError(f"{ext} is an invalid data product type.")
 
@@ -171,15 +179,23 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
     # The user is telling us a directory which contains raw products from this instrument.
     if dirName is None:
         dirName =  os.getcwd()
-    # On STXM, all data stacks of all types are identified by .hdr files.
+    # Create a list of all files with extensions that we can process.
     rawFiles = []
     for ext in raw_extensions:
         rawFiles.extend(glob2.glob(os.path.join(dirName, '**', f'*.{ext}')))
-    # rawFiles = rawFiles.sorted()
+    rawFiles.sort()
+
+    # If there is a csv with additional metadata fields supplied by the user then load it.  Ususally this is used for descriptions.
+    try:
+        samisData = pd.read_csv(os.path.join(dirName, 'samisdata.csv'))
+        statusOutput('Loaded metadata from samisdata.csv.')
+    except:
+        samisData = None
+        statusOutput('There is no samisdata.csv.  Where are your descriptions going to come from?  Consider making a csv...')
 
     for i, f in enumerate(rawFiles):
         try:
-            preprocess_one_product(f, sessionId=sessionId, statusOutput=statusOutput)
+            preprocess_one_product(f, sessionId=sessionId, statusOutput=statusOutput, samisData=samisData)
             statusOutput(f'Preprocessed {f}')
         except Exception as e:
             # If that one Xim failed, go on and process the next, it won't be included in the data products.
@@ -200,8 +216,8 @@ if __name__ == '__main__':
     # preprocess_all_products()
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
-    # tempdir = '/Users/Zack/Desktop' # Mac
-    tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
+    tempdir = '/Users/Zack/Desktop' # Mac
+    # tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
     preprocess_all_products(os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer'), sessionId=314)
     # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser'), sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0005.dm3'), sessionId=314, statusOutput=print)

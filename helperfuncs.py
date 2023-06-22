@@ -4,6 +4,7 @@ import shutil
 from skimage.io import imread
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 '''--------------- GENERAL FUNCTIONS ---------------'''
 
@@ -73,6 +74,24 @@ def ome_to_resolution_cm(metadata):
     yval = scale/metadata['PhysicalSizeY']
     return (xval, yval)
         
+# Look through the samisdata.csv file and find the row that matches this file if it is present.
+def samis_dict_for_this_file(samisData=None, fileName=None, statusOutput=print):
+    # Use the .loc function to find rows where the "filename" column matches
+    matchedRows = samisData.loc[samisData['filename'] == os.path.basename(fileName)]
+
+    if matchedRows.empty:
+        statusOutput(f"No metadata found in samisdata.csv for {f}")
+        samisData = {}
+    else:
+        # Return the first matching row as a DataFrame
+        samisData = matchedRows.iloc[0].to_dict()
+    
+    if len(matchedRows) > 1:
+        statusOutput(f"Multiple rows in samisdata.csv matched {f}.  Using only first row.")
+    
+    # Turn it into a dictionary for the caller
+    return samisData
+
 '''--------------- INIT FUNCTIONS ---------------'''
 
 # We want to create directories for processing data.
