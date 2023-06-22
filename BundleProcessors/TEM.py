@@ -98,7 +98,7 @@ def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_
     with open(yamlFileName, 'w') as f:
         suppYaml = {"description": core_metadata['description'],
                     "supDocType": core_metadata['dataComponentType'],
-                    "associatedFiles": f'{productName}.ome.tif'}
+                    "associatedFiles": [f'{productName}.ome.tif']}
                     # "associatedFiles": f'{sessionId}_instrumentMetadata_{productId:05d}.ome.txt'}
         yaml.dump(suppYaml, f, default_flow_style=False, sort_keys=False)
 
@@ -132,6 +132,10 @@ def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None,
     return
 
 def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, samisData=None):
+    # Get any information in the user's csv for SAMIS.
+    samisDict = hf.samis_dict_for_this_file(samisData, fileName, statusOutput)
+    description = samisDict.get('description', '')
+
     if '/' in file.axes_manager['y'].units:
         dataComponentType = 'TEMPatternsImage'
         channel = ''
@@ -140,7 +144,7 @@ def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, 
         channel = 'TEM'
 
     core_metadata = { 
-        "description": f'{os.path.basename(fileName)}',
+        "description": f"{os.path.basename(fileName)}: {description}" if description else os.path.basename(fileName),
         "dataComponentType": dataComponentType,
         "channel": channel,
         "PhysicalSizeX": float(file.axes_manager['x'].scale),
@@ -148,6 +152,8 @@ def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, 
         "PhysicalSizeY": float(file.axes_manager['y'].scale),
         "PhysicalSizeYUnit": file.axes_manager['y'].units,
         }
+    # Add any metadata from samisData for this product.
+    hf.union_dict_no_overwrite(core_metadata, hf.sanitize_dict_for_yaml(samisDict))
 
     write_TEM(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file.data.astype('float32'), core_metadata=core_metadata, addl_metadata=file.metadata.as_dictionary())
     return
@@ -217,8 +223,8 @@ if __name__ == '__main__':
     # preprocess_all_products()
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
-    # tempdir = '/Users/Zack/Desktop' # Mac
-    tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
+    tempdir = '/Users/Zack/Desktop' # Mac
+    # tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
     preprocess_all_products(os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer'), sessionId=314)
     # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser'), sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0005.dm3'), sessionId=314, statusOutput=print)
