@@ -53,6 +53,11 @@ def sanitize_dict_for_yaml(data):
             sanitized_data[k] = v
     return sanitized_data
 
+# add keys from dict 2 to dict 1 but don't overwrite keys already in dict1.
+def union_dict_no_overwrite(dict1, dict2):
+    for key in dict2:
+        if key not in dict1:
+            dict1[key] = dict2[key]
 
 # OME-TIF stores image resolution as a unit, and each pixel is no many units across.
 # TIF resolution tags use pixels/cm so we need to convert whatever units we have to px/cm.
@@ -76,18 +81,22 @@ def ome_to_resolution_cm(metadata):
         
 # Look through the samisdata.csv file and find the row that matches this file if it is present.
 def samis_dict_for_this_file(samisData=None, fileName=None, statusOutput=print):
+    # If there is no info then we need to use an empty dict.
+    if samisData is None:
+        return {}
+
     # Use the .loc function to find rows where the "filename" column matches
     matchedRows = samisData.loc[samisData['filename'] == os.path.basename(fileName)]
 
     if matchedRows.empty:
-        statusOutput(f"No metadata found in samisdata.csv for {f}")
+        statusOutput(f"No metadata found in samisdata.csv for {fileName}")
         samisData = {}
     else:
         # Return the first matching row as a DataFrame
         samisData = matchedRows.iloc[0].to_dict()
     
     if len(matchedRows) > 1:
-        statusOutput(f"Multiple rows in samisdata.csv matched {f}.  Using only first row.")
+        statusOutput(f"Multiple rows in samisdata.csv matched {fileName}.  Using only first row.")
     
     # Turn it into a dictionary for the caller
     return samisData
