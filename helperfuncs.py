@@ -5,6 +5,9 @@ from skimage.io import imread
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tifffile import imwrite, TiffWriter, TiffFile
+import yaml
+from yaml.representer import SafeRepresenter
 
 '''--------------- GENERAL FUNCTIONS ---------------'''
 
@@ -78,7 +81,10 @@ def ome_to_resolution_cm(metadata):
     xval = scale/metadata['PhysicalSizeX']
     yval = scale/metadata['PhysicalSizeY']
     return (xval, yval)
-        
+
+def replace_greek_symbols(input_string):
+    return input_string.replace("µ", "u").replace("Å", "A") 
+
 # Look through the samisdata.csv file and find the row that matches this file if it is present.
 def samis_dict_for_this_file(samisData=None, fileName=None, statusOutput=print):
     # If there is no info then we need to use an empty dict.
@@ -171,3 +177,54 @@ def plot_png(fileName):
     fig = plt.figure()
     plt.gca().imshow(img)
     st.pyplot(fig)
+
+'''--------------- BUNDLE PRODUCT WRITE FUNCTIONS ---------------'''
+
+# We want to create directories for processing data.
+def write_ome_tif_image(fileName, sessionId, productId, img, core_metadata, addl_metadata):
+
+    productName = f"{sessionId}_{core_metadata['dataComponentType']}_{productId:05d}"
+
+    ome_metadata={
+        'axes': 'YX',
+        'PixelType': 'float32',
+        'BigEndian': False,
+        'SizeX': img.shape[0],
+        'SizeY': img.shape[1],
+        'PhysicalSizeX': core_metadata['PhysicalSizeX'], # Pixels/unit
+        'PhysicalSizeXUnit': core_metadata['PhysicalSizeXUnit'],
+        'PhysicalSizeY': core_metadata['PhysicalSizeY'], # Pixels/unit
+        'PhysicalSizeYUnit': core_metadata['PhysicalSizeYUnit'],
+        'ranges': [0.0,1.0],
+        }
+    # Add all the metadata here so it is all embedded in the OME XML header.
+    ome_metadata.update(sanitize_dict_for_yaml(core_metadata))
+    ome_metadata.update(sanitize_dict_for_yaml(addl_metadata))
+    resolution = ome_to_resolution_cm(ome_metadata)
+
+    with TiffWriter(os.path.join(os.path.dirname(fileName), f'{productName}.ome.tif')) as tif:
+        mean = np.mean(img)
+        std = np.std(img)
+        minValTag = (280,   # 280=MinSampleValue TIFF tag.  See https://www.loc.gov/preservation/digital/formats/content/tiff_tags.shtml
+                    11,     # dtype float32 
+                    1,      # one value in the tag.
+                    mean-std,    # What the value is.
+                    False,   # Write it to the first page of the Tiff only.
+                    )
+        maxValTag = (281, 11, 1, mean+std, False) # MaxSampleValue TIFF tag.
+        tif.write(img, photometric='minisblack', metadata=ome_metadata, resolution=resolution, resolutionunit='CENTIMETER', extratags=[minValTag, maxValTag])
+
+    # Write the supplementary yaml+txt too with all the instrument data.
+    # Hint: the txt file is a yaml, but the yaml pointing to the metadata has to be the BDD yaml only, no extra keys.
+    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.txt")
+    with open(yamlFileName, 'w') as f:
+        yaml.dump(ome_metadata, f, default_flow_style=False, sort_keys=False)
+    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.yaml")
+    with open(yamlFileName, 'w') as f:
+        suppYaml = {"description": core_metadata['description'],
+                    "supDocType": core_metadata['dataComponentType'],
+                    "associatedFiles": [f'{productName}.ome.tif']}
+                    # "associatedFiles": f'{sessionId}_instrumentMetadata_{productId:05d}.ome.txt'}
+        yaml.dump(suppYaml, f, default_flow_style=False, sort_keys=False)
+
+

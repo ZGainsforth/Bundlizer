@@ -13,12 +13,15 @@ from yaml.representer import SafeRepresenter
 from ncempy.io import dm, ser # Reader for dm3/dm4 files and ser (TIA) files.
 import importlib
 hf = importlib.import_module('helperfuncs', '..')
-from tifffile import imwrite, TiffWriter, TiffFile
-# from tifffile import imsave as tiffsave
 import json
 
 # For unique product ID's we start a counter.
 productId = 0
+
+def new_productId():
+    global productId
+    productId += 1
+    return productId
 
 # These file extensions indicate data types that we can convert 
 raw_extensions = ['dm3', # Gatan files
@@ -35,14 +38,8 @@ def get_image_type(metadata=None):
         case _:
             raise ValueError('Cannot guess image type from metadata.  Please expand case statement.')
 
-# Given this is a STEM image, is this a HAADF image, BF-STEM, etc?
-def get_STEM_type(metadata=None):
-    # For now, only HAADF.
-    return 'HAADF'
-
-def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_metadata=None, addl_metadata=None):
-    global productId
-    productId += 1
+def write_TEM_image(fileName=None, sessionId=None, statusOutput=print, img=None, core_metadata=None, addl_metadata=None):
+    productId = new_productId()
 
     productName = f"{sessionId}_{core_metadata['dataComponentType']}_{productId:05d}"
     statusOutput(f'Producing data product {productName}.')
@@ -51,7 +48,6 @@ def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_
     yamlData = { 
         "description": core_metadata['description'],
         "dataComponentType": core_metadata['dataComponentType'],
-        "channel": core_metadata['channel'],
         "pixelScaleX": core_metadata['PhysicalSizeX'],
         "pixelScaleY": core_metadata['PhysicalSizeY'],
         "pixelUnits": core_metadata['PhysicalSizeXUnit'],
@@ -60,47 +56,8 @@ def write_TEM(fileName=None, sessionId=None, statusOutput=print, img=None, core_
     with open(yamlFileName, 'w') as f:
         yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
 
-    ome_metadata={
-        'axes': 'YX',
-        'PixelType': 'float32',
-        'BigEndian': False,
-        'SizeX': img.shape[0],
-        'SizeY': img.shape[1],
-        'PhysicalSizeX': core_metadata['PhysicalSizeX'], # Pixels/unit
-        'PhysicalSizeXUnit': core_metadata['PhysicalSizeXUnit'],
-        'PhysicalSizeY': core_metadata['PhysicalSizeY'], # Pixels/unit
-        'PhysicalSizeYUnit': core_metadata['PhysicalSizeYUnit'],
-        'ranges': [0.0,1.0],
-        }
-    # Add all the metadata here so it is all embedded in the OME XML header.
-    ome_metadata.update(hf.sanitize_dict_for_yaml(core_metadata))
-    ome_metadata.update(hf.sanitize_dict_for_yaml(addl_metadata))
-    resolution = hf.ome_to_resolution_cm(ome_metadata)
-
-    with TiffWriter(os.path.join(os.path.dirname(fileName), f'{productName}.ome.tif')) as tif:
-        mean = np.mean(img)
-        std = np.std(img)
-        minValTag = (280,   # 280=MinSampleValue TIFF tag.  See https://www.loc.gov/preservation/digital/formats/content/tiff_tags.shtml
-                    11,     # dtype float32 
-                    1,      # one value in the tag.
-                    mean-std,    # What the value is.
-                    False,   # Write it to the first page of the Tiff only.
-                    )
-        maxValTag = (281, 11, 1, mean+std, False) # MaxSampleValue TIFF tag.
-        tif.write(img, photometric='minisblack', metadata=ome_metadata, resolution=resolution, resolutionunit='CENTIMETER', extratags=[minValTag, maxValTag])
-
-    # Write the supplementary yaml+txt too with all the instrument data.
-    # Hint: the txt file is a yaml, but the yaml pointing to the metadata has to be the BDD yaml only, no extra keys.
-    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.txt")
-    with open(yamlFileName, 'w') as f:
-        yaml.dump(ome_metadata, f, default_flow_style=False, sort_keys=False)
-    yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.yaml")
-    with open(yamlFileName, 'w') as f:
-        suppYaml = {"description": core_metadata['description'],
-                    "supDocType": core_metadata['dataComponentType'],
-                    "associatedFiles": [f'{productName}.ome.tif']}
-                    # "associatedFiles": f'{sessionId}_instrumentMetadata_{productId:05d}.ome.txt'}
-        yaml.dump(suppYaml, f, default_flow_style=False, sort_keys=False)
+    # Write an OME-TIF with all the metadata, pixel scales, etc.
+    hf.write_ome_tif_image(fileName, sessionId, productId, img, core_metadata, addl_metadata)
 
     # If this is an electron diffraction pattern, then there is supposed to be a PDF for the calibration.
     if core_metadata['dataComponentType'] == 'TEMPatternsImage':
@@ -119,7 +76,6 @@ def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None,
     core_metadata = { 
         "description": f"{os.path.basename(fileName)}: {description}" if description else os.path.basename(fileName),
         "dataComponentType": 'STEMImage',
-        "channel": get_STEM_type(metadata=file['metadata']),
         "PhysicalSizeX": float(file['pixelSize'][0]),
         "PhysicalSizeXUnit": str(file['pixelUnit'][1]),
         "PhysicalSizeY": float(file['pixelSize'][1]),
@@ -128,7 +84,7 @@ def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None,
     # Add any metadata from samisData for this product.
     hf.union_dict_no_overwrite(core_metadata, hf.sanitize_dict_for_yaml(samisDict))
 
-    write_TEM(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file['data'][:,:].astype('float32'), core_metadata=core_metadata, addl_metadata=file['metadata'])
+    write_TEM_image(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file['data'][:,:].astype('float32'), core_metadata=core_metadata, addl_metadata=file['metadata'])
     return
 
 def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, samisData=None):
@@ -138,15 +94,12 @@ def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, 
 
     if '/' in file.axes_manager['y'].units:
         dataComponentType = 'TEMPatternsImage'
-        channel = ''
     else:
         dataComponentType = 'TEMImage'
-        channel = 'TEM'
 
     core_metadata = { 
         "description": f"{os.path.basename(fileName)}: {description}" if description else os.path.basename(fileName),
         "dataComponentType": dataComponentType,
-        "channel": channel,
         "PhysicalSizeX": float(file.axes_manager['x'].scale),
         "PhysicalSizeXUnit": file.axes_manager['x'].units,
         "PhysicalSizeY": float(file.axes_manager['y'].scale),
@@ -155,10 +108,24 @@ def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, 
     # Add any metadata from samisData for this product.
     hf.union_dict_no_overwrite(core_metadata, hf.sanitize_dict_for_yaml(samisDict))
 
-    write_TEM(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file.data.astype('float32'), core_metadata=core_metadata, addl_metadata=file.metadata.as_dictionary())
+    write_TEM_image(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file.data.astype('float32'), core_metadata=core_metadata, addl_metadata=file.metadata.as_dictionary())
     return
 
-def preprocess_EDSCube(fileName=None, sessionId=None, statusOutput=print, file=None):
+# Preprocess Bruker EDS cube.
+def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, file=None, samisData=None):
+    productId = new_productId()
+
+    # Get any information in the user's csv for SAMIS.
+    samisDict = hf.samis_dict_for_this_file(samisData, fileName, statusOutput)
+    description = samisDict.get('description', '')
+
+    core_metadata = { 
+        "description": f"{os.path.basename(fileName)}: {description}" if description else os.path.basename(fileName),
+        "dataComponentType": 'STEMEDSCube',
+        }
+    # Add any metadata from samisData for this product.
+    hf.union_dict_no_overwrite(core_metadata, hf.sanitize_dict_for_yaml(samisDict))
+
     return
 
 def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print, samisData=None):
@@ -203,10 +170,10 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
     for i, f in enumerate(rawFiles):
         try:
             preprocess_one_product(f, sessionId=sessionId, statusOutput=statusOutput, samisData=samisData)
-            statusOutput(f'Preprocessed {f}')
+            statusOutput(f'Preprocessed {f}\n')
         except Exception as e:
             # If that one Xim failed, go on and process the next, it won't be included in the data products.
-            statusOutput(f'Preprocessed {f} failed {e}.')
+            statusOutput(f'Preprocessed {f} failed {e}.\n')
             pass
         # We are tearing through RAM with these stacks.  Sometimes, the garbage collection can't keep up and we run out of memory.
         # Or we force it to clean up after each stack.
