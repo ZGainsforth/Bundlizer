@@ -126,6 +126,8 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, file=None,
     # Add any metadata from samisData for this product.
     hf.union_dict_no_overwrite(core_metadata, hf.sanitize_dict_for_yaml(samisDict))
 
+    # TODO: create emd file from bcf.
+
     return
 
 def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print, samisData=None):
