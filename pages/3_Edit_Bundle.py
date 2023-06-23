@@ -9,8 +9,10 @@ import zipfile
 from io import BytesIO
 import importlib
 import re
-from helperfuncs import get_coordinates, nuke_text, add_cleanup_action, cleanup_and_stop, initialize_directories, plot_png, load_textfile
+from helperfuncs import get_coordinates, nuke_text, add_cleanup_action, cleanup_and_stop, initialize_directories, plot_png, load_textfile, load_instrument_processor
 import glob2
+import tifffile
+import matplotlib.pyplot as plt
 
 st.markdown("# View/Edit bundle file and raw products")
 st.markdown("The user can view a data bundle and add/remove products here.")
@@ -44,6 +46,9 @@ if not os.path.exists(bundleinfoFileName):
     st.stop()
 
 bundleYaml = st_ace(value=load_textfile(bundleinfoFileName), language='yaml')
+
+# We may need the instrument processor to produce nice images and outputs for the files that have been bundlized.
+instrumentProcessor = load_instrument_processor(yaml.safe_load(bundleYaml))
 
 # Make a# Now collect all the data products into a dictionary with format
 # {'productName': {'Include':True,          # whether to include this data product in the bundle.
@@ -84,6 +89,15 @@ for productId, productInfo in productsDict.items():
             if ext in ['.png', '.jpg', '.jpeg', '.gif']:
                 st.write(f"\t{f}")
                 st.image(f)
+            if ext == '.tif':
+                st.write(f"\t{f}")
+                img = tifffile.imread(f)
+                fig = plt.figure()
+                plt.imshow(img)
+                st.pyplot(fig)
+            if ext == '.emd':
+                fig = st.session_state['instrumentProcessor'].plot_emd(f)
+                st.pyplot(fig)
             if ext == '.yaml':
                 productInfo['yamlContent'] = productInfo['Expander'].text_area(label=f'{f}:', value=load_textfile(f), key=f)
                 # productInfo['yamlContent'] = st_ace(value=load_textfile(f), language='yaml', key=f)

@@ -8,7 +8,7 @@ import zipfile
 from io import BytesIO
 import importlib
 import re
-from helperfuncs import get_coordinates, nuke_text, add_cleanup_action, cleanup_and_stop, initialize_directories, plot_png, load_textfile
+from helperfuncs import get_coordinates, nuke_text, add_cleanup_action, cleanup_and_stop, initialize_directories, plot_png, load_textfile, load_instrument_processor
 import glob2
 
 st.markdown("# Create a bundle from raw data")
@@ -69,6 +69,7 @@ fiducialUnits = st.selectbox('Select fiducial units', ['um','mm', 'cm','m'])
 data = {
     "sessionId": sessionId,
     "analysisTechniqueIdentifier": analysisTechniqueIdentifier,
+    "instrumentName": instrumentName,
     "title": title,
     "abstract": abstract,
     "dataBundleCreator": [
@@ -122,11 +123,8 @@ with open(bundleinfoFileName, 'w') as f:
 # Make a progress bar.  We will be updating this during the processing step since it takes a while.
 instrumentProgress = st.progress(0.0)
 
-# Now we are going to import the appropriate python script to do raw data processing for this instrument.
-sanitizeRegex = r"\s+|-|\." # selects for any whitespace, dash or period.
-instrumentModuleName = f"BundleProcessors.{re.sub(sanitizeRegex, '_', analysisTechniqueIdentifier)}.{re.sub(sanitizeRegex, '_', instrumentName)}" 
-instrumentProcessor = importlib.import_module(instrumentModuleName)
-instrumentProcessor = importlib.reload(instrumentProcessor)
+# Preprocess the data in the uploaded zip to produce the bundle file products.
+instrumentProcessor  = load_instrument_processor(data)
 instrumentProcessor.preprocess_all_products(rawDir, sessionId=sessionId, statusOutput=nuke_text, statusProgress=instrumentProgress)
 
 # Now move to the next page to view the results.

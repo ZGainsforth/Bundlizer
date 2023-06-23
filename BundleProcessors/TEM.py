@@ -27,9 +27,9 @@ def new_productId():
 
 # These file extensions indicate data types that we can convert 
 raw_extensions = [
-                #   'dm3', # Gatan files
-                #   'dm4',
-                #   'ser', # TIA files.
+                  'dm3', # Gatan files
+                  'dm4',
+                  'ser', # TIA files.
                   'bcf', # Bruker EDS files.
                   ]
 
@@ -40,6 +40,71 @@ def get_image_type(metadata=None):
             return 'STEM'
         case _:
             raise ValueError('Cannot guess image type from metadata.  Please expand case statement.')
+
+def plot_emd(fileName):
+    with h5py.File(fileName, 'r') as emd:
+        # Load EDS data
+        eds_data = np.array(emd['data']['EDS']['EDS'])
+
+        # Create sum over energy axis (2D image)
+        sum_image = np.sum(eds_data, axis=2)
+
+        # Create mean and max over spatial dimensions (spectrum)
+        spectrum = np.mean(eds_data, axis=(0,1))
+        spectrum_max = np.max(eds_data, axis=(0,1))
+
+        # Get axes information
+        dim1 = np.array(emd['data']['EDS']['dim1'])[:, 0]
+        dim2 = np.array(emd['data']['EDS']['dim2'])[:, 0]
+        dim3 = np.array(emd['data']['EDS']['dim3'])[:, 0]
+
+        fig, axs = plt.subplots(2, 1)
+
+        # Plot 2D image
+        im = axs[0].imshow(sum_image, cmap='gray', extent=[dim2[0], dim2[-1], dim1[0], dim1[-1]])
+        axs[0].set_title('EDS stack sum image')
+        axs[0].set_ylabel(emd['data']['EDS']['dim1'].attrs['name'].decode() + ' (' + emd['data']['EDS']['dim1'].attrs['units'].decode() + ')')
+        axs[0].set_xlabel(emd['data']['EDS']['dim2'].attrs['name'].decode() + ' (' + emd['data']['EDS']['dim2'].attrs['units'].decode() + ')')
+
+        # Plot spectrum
+        axs[1].plot(dim3, spectrum)
+        axs[1].plot(dim3, spectrum_max)
+        axs[1].set_title('EDS stack spectrum')
+        axs[1].set_xlabel(emd['data']['EDS']['dim3'].attrs['name'].decode() + ' (' + emd['data']['EDS']['dim3'].attrs['units'].decode() + ')')
+        axs[1].set_ylabel('Counts')
+        axs[1].legend(['Mean value', 'Max value'])
+
+        plt.tight_layout()
+
+    return fig
+# def plot_emd(fileName):
+#     # Open emd file
+#     emd = h5py.File(fileName, 'r')
+
+#     # Load EDS data
+#     eds_data = np.array(emd['data']['EDS']['EDS'])
+
+#     # Create sum over energy axis (2D image)
+#     sum_image = np.sum(eds_data, axis=2)
+
+#     # Create sum over spatial dimensions (spectrum)
+#     spectrum = np.mean(eds_data, axis=(0,1))
+#     spectrum_max = np.max(eds_data, axis=(0,1))
+
+#     fig, axs = plt.subplots(2, 1)
+
+#     # Plot 2D image
+#     axs[0].imshow(sum_image, cmap='gray')
+#     axs[0].set_title('EDS stack sum image')
+
+#     # Plot spectrum
+#     axs[1].plot(spectrum)
+#     axs[1].plot(spectrum_max)
+#     axs[1].set_title('EDS stack spectrum')
+#     axs[1].legend(['Mean value', 'Max value'])
+#     plt.tight_layout()
+
+#     return fig
 
 def write_TEM_image(fileName=None, sessionId=None, statusOutput=print, img=None, core_metadata=None, addl_metadata=None):
     productId = new_productId()
@@ -141,7 +206,7 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
     with open(yamlFileName, 'w') as f:
         yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
 
-    # TODO: create emd file from bcf.
+    # Create emd file from bcf.
     emdFileName = os.path.join(os.path.dirname(fileName), f'{productName}.emd')
     emd = h5py.File(emdFileName, 'w')
     emd.attrs['version_major'] = 0

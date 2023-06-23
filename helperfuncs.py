@@ -8,6 +8,7 @@ import pandas as pd
 from tifffile import imwrite, TiffWriter, TiffFile
 import yaml
 from yaml.representer import SafeRepresenter
+import importlib
 
 '''--------------- GENERAL FUNCTIONS ---------------'''
 
@@ -118,6 +119,23 @@ def samis_dict_for_this_file(samisData=None, fileName=None, statusOutput=print):
     # Turn it into a dictionary for the caller
     return samisData
 
+def load_instrument_processor(bundleInfo=None):
+    # Now we are going to import the appropriate python script to do raw data processing for this instrument.
+    sanitizeRegex = r"\s+|-|\." # selects for any whitespace, dash or period.
+    # Load the instrument processor for the BDD + instrument combo.
+    try:
+        instrumentModuleName = f"BundleProcessors.{re.sub(sanitizeRegex, '_', bundleInfo['analysisTechniqueIdentifier'])}.{re.sub(sanitizeRegex, '_', bundleInfo['instrumentName'])}" 
+        instrumentProcessor = importlib.import_module(instrumentModuleName)
+    except ModuleNotFoundError as e:
+        # If we can't load the combo, then we fall back to using a generic BDD instrument processor.
+        instrumentModuleName = f"BundleProcessors.{re.sub(sanitizeRegex, '_', bundleInfo['analysisTechniqueIdentifier'])}" 
+        instrumentProcessor = importlib.import_module(instrumentModuleName)
+        # If this doesn't work then it is an error.
+        assert hasattr(instrumentProcessor,'preprocess_all_products'), f'No instrument processor for the BDD/instrument combo: {instrumentModuleName}, {instrumentProcessor}'
+    st.session_state['instrumentProcessor'] = instrumentProcessor
+    return instrumentProcessor
+
+
 '''--------------- EMD FUNCTIONS ---------------'''
 
 def create_emd(fileName=None):
@@ -190,6 +208,12 @@ def cleanup_and_stop():
     st.stop()
 
 '''--------------- PLOTTING FUNCTIONS ---------------'''
+
+# We want to create directories for processing data.
+def plot_array(img):
+    fig = plt.figure()
+    plt.gca().imshow(img)
+    st.pyplot(fig)
 
 # We want to create directories for processing data.
 def plot_png(fileName):
