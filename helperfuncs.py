@@ -56,6 +56,17 @@ def sanitize_dict_for_yaml(data):
             sanitized_data[k] = v
     return sanitized_data
 
+# Thank you stackoverflow: https://stackoverflow.com/questions/6027558/flatten-nested-dictionaries-compressing-keys
+def flatten_dict(d, parent_key='', sep='.'):
+    flattened_dict = {}
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, dict):
+            flattened_dict.update(flatten_dict(v, new_key, sep=sep))
+        else:
+            flattened_dict[new_key] = v
+    return flattened_dict
+
 # add keys from dict 2 to dict 1 but don't overwrite keys already in dict1.
 def union_dict_no_overwrite(dict1, dict2):
     for key in dict2:
@@ -107,6 +118,15 @@ def samis_dict_for_this_file(samisData=None, fileName=None, statusOutput=print):
     # Turn it into a dictionary for the caller
     return samisData
 
+'''--------------- EMD FUNCTIONS ---------------'''
+
+def create_emd(fileName=None):
+    emd = h5py.File(emdFileName, 'w')
+    emd.attrs['version_major'] = 0
+    emd.attrs['version_minor'] = 2
+    return emd
+
+#  def emd_add_cube(emd=None, groupName=None, )
 '''--------------- INIT FUNCTIONS ---------------'''
 
 # We want to create directories for processing data.
