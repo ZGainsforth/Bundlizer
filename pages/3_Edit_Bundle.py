@@ -13,6 +13,7 @@ from helperfuncs import get_coordinates, nuke_text, add_cleanup_action, cleanup_
 import glob2
 import tifffile
 import matplotlib.pyplot as plt
+import numpy as np
 
 st.markdown("# View/Edit bundle file and raw products")
 st.markdown("The user can view a data bundle and add/remove products here.")
@@ -59,21 +60,47 @@ productsDict = {}
 
 # Find all the yaml files.
 yamlFiles = sorted(glob2.glob(os.path.join(rawDir, '**', '*.yaml')))
+# In addition we need a list of all the files.
+allFiles = glob2.glob(os.path.join(rawDir, '**', '*'))
 
 # Using the yamls, find all the product files and add them to productsDict
 for yamlFile in yamlFiles:
     fullName, _ = os.path.splitext(yamlFile)
-    productId = os.path.basename(fullName) # This is the ID that matches the raw data source.
     pathName = os.path.dirname(fullName) # This is the directory containing the file.
 
-    # All files in the product are going to have the same name as the yaml but different extensions.
-    matchingFiles = sorted(glob2.glob(os.path.join(pathName, productId) + '.*'))
-    # matchingFiles = [file for file in matchingFiles if file != yamlFile]
+    # Get the sessionId and productId out of the yaml name.
+    pattern = re.compile(r'(\d+)_.*_(\d+)')
+    match = pattern.match(os.path.basename(fullName))
+    if match:
+        yamlsessionId, productId = match.groups()
+    else:
+        if os.path.basename(yamlFile) != f'{sessionId}_bundleinfo.yaml':
+            st.write(f'cannot find sessionId, productId in yaml name: {yamlFile}')
+        continue
+    
+    if yamlsessionId != sessionId:
+        st.write(f'Invalid session ID from yaml name: sessionId={yamlsessionId}, fileName={yamlFile}')
+
+    # Construct the regular expression pattern to find all the files in this product.
+    # \d+ matches one or more digits, and .* matches any characters (except a newline).
+    pattern = re.compile(rf"\d+_.*_{productId}\..*")
+
+    matchingFiles = []
+
+    for filename in allFiles :
+        if pattern.match(os.path.basename(filename)):
+            matchingFiles.append(filename)
+
+    matchingFiles = sorted(matchingFiles)
 
     # Expander will point to the GUI element which displays all the info about this product on the page.
     # Include is whether this particular product will be included in the bundle.
     # Files are the files that are part of the product.
-    productsDict[productId] = {'Expander': None, 'Include': True, 'Files': matchingFiles}
+    # EditText is a dictionary containing a list of editable strings that are the text files in this product (yamls, txt, etc.)
+    # EditText keys are the filenames so we can write the edited text back.
+    productsDict[productId] = {'Expander': None, 'Include': True, 'Files': matchingFiles, 'EditText': {}}
+
+productsDict = dict(sorted(productsDict.items()))
 
 # We loop through all the products putting each on the screen.  Each product will be placed in an expander.
 for productId, productInfo in productsDict.items():
@@ -87,20 +114,25 @@ for productId, productInfo in productsDict.items():
             # st.write(f"\t{f}")
             _, ext = os.path.splitext(f)
             if ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                st.write(f"\t{f}")
+                st.write(f"\t{os.path.basename(f)}")
                 st.image(f)
             if ext == '.tif':
-                st.write(f"\t{f}")
+                st.write(f"\t{os.path.basename(f)}")
                 img = tifffile.imread(f)
                 fig = plt.figure()
-                plt.imshow(img)
+                mean = np.mean(img)
+                std = np.std(img)
+                plt.imshow(img, cmap='gray', vmin=mean-2*std, vmax=mean+2*std)
+                plt.colorbar()
+                # plt.imshow(img)
                 st.pyplot(fig)
             if ext == '.emd':
                 fig = st.session_state['instrumentProcessor'].plot_emd(f)
                 st.pyplot(fig)
             if ext == '.yaml':
-                productInfo['yamlContent'] = productInfo['Expander'].text_area(label=f'{f}:', value=load_textfile(f), key=f)
-                # productInfo['yamlContent'] = st_ace(value=load_textfile(f), language='yaml', key=f)
+                productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f), key=f)
+            if ext == '.txt':
+                productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f))
             shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
 
 if st.button('Prepare bundle files for download.'):

@@ -23,7 +23,7 @@ else:
     sessionId = ''
 sessionId = st.text_input("SAMIS Session ID (get one here https://samprod.lpl.arizona.edu/sada):", value=sessionId)
 
-if sessionId is '':
+if not sessionId:
     st.stop()
 else:
     st.session_state['sessionId'] = sessionId

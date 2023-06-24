@@ -2,6 +2,7 @@
 import matplotlib
 # matplotlib.use('agg')
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import numpy as np
 import hyperspy.api as hs
 import pandas as pd
@@ -58,7 +59,8 @@ def plot_emd(fileName):
         dim2 = np.array(emd['data']['EDS']['dim2'])[:, 0]
         dim3 = np.array(emd['data']['EDS']['dim3'])[:, 0]
 
-        fig, axs = plt.subplots(2, 1)
+        # Create the figure and axes using plt.subplots
+        fig, axs = plt.subplots(2, 1, figsize=(6, 9)) 
 
         # Plot 2D image
         im = axs[0].imshow(sum_image, cmap='gray', extent=[dim2[0], dim2[-1], dim1[0], dim1[-1]])
@@ -77,34 +79,6 @@ def plot_emd(fileName):
         plt.tight_layout()
 
     return fig
-# def plot_emd(fileName):
-#     # Open emd file
-#     emd = h5py.File(fileName, 'r')
-
-#     # Load EDS data
-#     eds_data = np.array(emd['data']['EDS']['EDS'])
-
-#     # Create sum over energy axis (2D image)
-#     sum_image = np.sum(eds_data, axis=2)
-
-#     # Create sum over spatial dimensions (spectrum)
-#     spectrum = np.mean(eds_data, axis=(0,1))
-#     spectrum_max = np.max(eds_data, axis=(0,1))
-
-#     fig, axs = plt.subplots(2, 1)
-
-#     # Plot 2D image
-#     axs[0].imshow(sum_image, cmap='gray')
-#     axs[0].set_title('EDS stack sum image')
-
-#     # Plot spectrum
-#     axs[1].plot(spectrum)
-#     axs[1].plot(spectrum_max)
-#     axs[1].set_title('EDS stack spectrum')
-#     axs[1].legend(['Mean value', 'Max value'])
-#     plt.tight_layout()
-
-#     return fig
 
 def write_TEM_image(fileName=None, sessionId=None, statusOutput=print, img=None, core_metadata=None, addl_metadata=None):
     productId = new_productId()
@@ -330,8 +304,8 @@ if __name__ == '__main__':
     # preprocess_all_products()
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/017 EDS on Green phase/Before_1.ser', sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
-    # tempdir = '/Users/Zack/Desktop' # Mac
-    tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
+    tempdir = '/Users/Zack/Desktop' # Mac
+    # tempdir = '/home/zack/Rocket/WorkDir/BundlizerData' # Linux
     preprocess_all_products(os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer'), sessionId=314)
     # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser'), sessionId=314, statusOutput=print)
     # preprocess_one_product(fileName=os.path.join(tempdir, '20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0005.dm3'), sessionId=314, statusOutput=print)
