@@ -2,18 +2,16 @@ import streamlit as st
 from streamlit_extras.switch_page_button import switch_page
 from streamlit_ace import st_ace
 import os,sys,shutil
-import pandas as pd
-from collections import OrderedDict
+# import pandas as pd
 import yaml
 import zipfile
-from io import BytesIO
-import importlib
 import re
 from helperfuncs import get_coordinates, nuke_text, add_cleanup_action, cleanup_and_stop, initialize_directories, plot_png, load_textfile, load_instrument_processor
 import glob2
 import tifffile
 import matplotlib.pyplot as plt
 import numpy as np
+import subprocess
 
 st.markdown("# View/Edit bundle file and raw products")
 st.markdown("The user can view a data bundle and add/remove products here.")
@@ -102,6 +100,26 @@ for yamlFile in yamlFiles:
 
 productsDict = dict(sorted(productsDict.items()))
 
+@st.cache_data
+def draw_tiff(f):
+    img = tifffile.imread(f)
+    fig = plt.figure()
+    mean = np.mean(img)
+    std = np.std(img)
+    plt.imshow(img, cmap='gray', vmin=mean-2*std, vmax=mean+2*std)
+    plt.colorbar()
+    # plt.imshow(img)
+    st.pyplot(fig)
+
+@st.cache_data
+def draw_image(f):
+    st.image(f)
+
+@st.cache_data
+def draw_emd(f):
+    fig = st.session_state['instrumentProcessor'].plot_emd(f)
+    st.pyplot(fig)
+
 # We loop through all the products putting each on the screen.  Each product will be placed in an expander.
 for productId, productInfo in productsDict.items():
     if productId == f'{sessionId}_bundleinfo.yaml':
@@ -109,41 +127,45 @@ for productId, productInfo in productsDict.items():
         continue
     productInfo['Expander'] = st.expander(f'Product: {productId}', expanded=True)
     with productInfo['Expander'] as ex:
-        productInfo['Include'] = st.checkbox('Include in bundle?', value=productInfo['Include'], key=f'include{productId}')
+        # Future option to include include checkbox.  For now probably not necessary.
+        # productInfo['Include'] = st.checkbox('Include in bundle?', value=productInfo['Include'], key=f'include{productId}')
         for f in productInfo['Files']:
             # st.write(f"\t{f}")
             _, ext = os.path.splitext(f)
             if ext in ['.png', '.jpg', '.jpeg', '.gif']:
                 st.write(f"\t{os.path.basename(f)}")
-                st.image(f)
+                draw_image(f)
             if ext == '.tif':
                 st.write(f"\t{os.path.basename(f)}")
-                img = tifffile.imread(f)
-                fig = plt.figure()
-                mean = np.mean(img)
-                std = np.std(img)
-                plt.imshow(img, cmap='gray', vmin=mean-2*std, vmax=mean+2*std)
-                plt.colorbar()
-                # plt.imshow(img)
-                st.pyplot(fig)
+                draw_tiff(f)
             if ext == '.emd':
-                fig = st.session_state['instrumentProcessor'].plot_emd(f)
-                st.pyplot(fig)
+                draw_emd(f)
             if ext == '.yaml':
                 productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f), key=f)
             if ext == '.txt':
                 productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f))
             shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
 
-if st.button('Prepare bundle files for download.'):
-    # Zip the resulting raw data + bundle files up.
-    rawPlusBundleZip = os.path.join(rawDir, '..', f'{sessionId}')
-    shutil.make_archive(rawPlusBundleZip, 'zip', rawDir)
-    with open(rawPlusBundleZip+'.zip', 'rb') as f:
-        st.download_button('Download raw data + bundle files', data=f, file_name=f'{sessionId}_plus_raw.zip')
+# TODO: Update yamls and text files with edits the user made.
 
+def create_archive(input_dir, output_zip):
+    command = f"7z a -tzip -mx=9 -mmt={os.cpu_count()} {output_zip} {input_dir}"
+    subprocess.call(command, shell=True)
+
+if st.button('Prepare bundle file for download.'):
     # Zip the resulting bundle files only.
     bundleZip = os.path.join(bundleDir, '..', f'{sessionId}')
-    shutil.make_archive(bundleZip, 'zip', bundleDir)
+    # shutil.make_archive(bundleZip, 'zip', bundleDir)
+    with st.spinner('Preparing... This may take a minute.'):
+        create_archive(bundleDir, bundleZip)
     with open(bundleZip+'.zip', 'rb') as f:
-        st.download_button('Download bundle file only', data=f, file_name=f'{sessionId}.zip')
+        st.download_button('Download bundle file', data=f, file_name=f'{sessionId}.zip')
+
+# if st.button('Prepare raw data + bundle files for download.'):
+#     st.write('Preparing... This may take a minute.')
+#     # Zip the resulting raw data + bundle files up.
+#     rawPlusBundleZip = os.path.join(rawDir, '..', f'{sessionId}')
+#     # shutil.make_archive(rawPlusBundleZip, 'zip', rawDir)
+#     create_archive(rawDir, rawPlusBundleZip)
+#     with open(rawPlusBundleZip+'.zip', 'rb') as f:
+#         st.download_button('Download raw data + bundle files', data=f, file_name=f'{sessionId}_plus_raw.zip')

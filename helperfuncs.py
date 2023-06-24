@@ -27,6 +27,7 @@ def get_coordinates(coordinatesInput):
 def nuke_text(args):
     return
 
+@st.cache_data
 def load_textfile(fileName):
     with open(fileName, 'r') as f:
         fileContents = f.read()
