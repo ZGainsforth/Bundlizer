@@ -148,16 +148,24 @@ for productId, productInfo in productsDict.items():
 
 # TODO: Update yamls and text files with edits the user made.
 
-def create_archive(input_dir, output_zip):
-    command = f"7z a -tzip -mx=9 -mmt={os.cpu_count()} {output_zip} {input_dir}"
-    subprocess.call(command, shell=True)
+def create_archive(bundleDir, sessionId):
+    original_dir = os.getcwd()
+    os.chdir(bundleDir)
+    command = f"7z a -tzip -mx=9 -mmt={os.cpu_count()} {sessionId}.zip {sessionId}"
+    subprocess.run(command, shell=True)
+    os.chdir(original_dir)
+
+# def create_archive(input_dir, output_zip):
+#     command = f"7z a -tzip -mx=9 -mmt={os.cpu_count()} {output_zip} {input_dir}"
+#     subprocess.call(command, shell=True)
 
 if st.button('Prepare bundle file for download.'):
     # Zip the resulting bundle files only.
     bundleZip = os.path.join(bundleDir, '..', f'{sessionId}')
     # shutil.make_archive(bundleZip, 'zip', bundleDir)
     with st.spinner('Preparing... This may take a minute.'):
-        create_archive(bundleDir, bundleZip)
+        # create_archive(bundleDir, bundleZip)
+        create_archive(os.path.normpath(os.path.join(bundleDir,'..')), sessionId)
     with open(bundleZip+'.zip', 'rb') as f:
         st.download_button('Download bundle file', data=f, file_name=f'{sessionId}.zip')
 
