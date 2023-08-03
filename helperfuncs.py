@@ -9,6 +9,7 @@ from tifffile import imwrite, TiffWriter, TiffFile
 import yaml
 from yaml.representer import SafeRepresenter
 import importlib
+import subprocess
 
 '''--------------- GENERAL FUNCTIONS ---------------'''
 
@@ -135,6 +136,13 @@ def load_instrument_processor(bundleInfo=None):
         assert hasattr(instrumentProcessor,'preprocess_all_products'), f'No instrument processor for the BDD/instrument combo: {instrumentModuleName}, {instrumentProcessor}'
     st.session_state['instrumentProcessor'] = instrumentProcessor
     return instrumentProcessor
+
+def zip_directory(rootDir, subDir):
+    original_dir = os.getcwd()
+    os.chdir(rootDir)
+    command = f"7z a -tzip -mx=9 -mmt={os.cpu_count()} {subDir}.zip {subDir}"
+    subprocess.run(command, shell=True)
+    os.chdir(original_dir)
 
 
 '''--------------- EMD FUNCTIONS ---------------'''

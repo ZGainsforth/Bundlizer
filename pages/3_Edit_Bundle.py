@@ -11,7 +11,7 @@ import glob2
 import tifffile
 import matplotlib.pyplot as plt
 import numpy as np
-import subprocess
+import helperfuncs as hf
 
 st.markdown("# View/Edit bundle file and raw products")
 st.markdown("The user can view a data bundle and add/remove products here.")
@@ -66,11 +66,11 @@ for yamlFile in yamlFiles:
     fullName, _ = os.path.splitext(yamlFile)
     pathName = os.path.dirname(fullName) # This is the directory containing the file.
 
-    # Get the sessionId and productId out of the yaml name.
-    pattern = re.compile(r'(\d+)_.*_(\d+)')
+    # Get the sessionId, dataCompenentType and productId out of the yaml name.
+    pattern = re.compile(r'(\d+)_(.*)_(\d+)')
     match = pattern.match(os.path.basename(fullName))
     if match:
-        yamlsessionId, productId = match.groups()
+        yamlsessionId, yamlDataComponentType, productId = match.groups()
     else:
         if os.path.basename(yamlFile) != f'{sessionId}_bundleinfo.yaml':
             st.write(f'cannot find sessionId, productId in yaml name: {yamlFile}')
@@ -81,10 +81,10 @@ for yamlFile in yamlFiles:
 
     # Construct the regular expression pattern to find all the files in this product.
     # \d+ matches one or more digits, and .* matches any characters (except a newline).
-    pattern = re.compile(rf"\d+_.*_{productId}\..*")
+    pattern = re.compile(rf"{yamlsessionId}_{yamlDataComponentType}_{productId}.*")
+    # pattern = re.compile(rf"\d+_.*_{productId}.*")
 
     matchingFiles = []
-
     for filename in allFiles :
         if pattern.match(os.path.basename(filename)):
             matchingFiles.append(filename)
@@ -96,13 +96,17 @@ for yamlFile in yamlFiles:
     # Files are the files that are part of the product.
     # EditText is a dictionary containing a list of editable strings that are the text files in this product (yamls, txt, etc.)
     # EditText keys are the filenames so we can write the edited text back.
-    productsDict[productId] = {'Expander': None, 'Include': True, 'Files': matchingFiles, 'EditText': {}}
+    productsDict[productId] = {'Expander': None, 'Include': True, 'Files': matchingFiles, 'EditText': {}, 
+                               'sessionId': sessionId, 'productId': productId, 'dataComponentType': yamlDataComponentType}
 
 productsDict = dict(sorted(productsDict.items()))
 
 @st.cache_data
 def draw_tiff(f):
     img = tifffile.imread(f)
+    # If this is an image stack, then average into an image for display.
+    if len(img.shape) > 2:
+        img = np.mean(img, axis=0)
     fig = plt.figure()
     mean = np.mean(img)
     std = np.std(img)
@@ -119,6 +123,25 @@ def draw_image(f):
 def draw_emd(f):
     fig = st.session_state['instrumentProcessor'].plot_emd(f)
     st.pyplot(fig)
+
+def copy_file_to_output(f, bundleDir, productId, productInfo):
+    # Most files in the bundle just get copied to the root of the bundle.
+    # Collections are the exception.
+    if 'Collection' not in f:
+        shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
+        return
+
+    # Well it is a collection, make a subdir to put the files in inside the collection.
+    collectionDir = os.path.join(bundleDir, f"{productInfo['sessionId']}_{productInfo['dataComponentType']}_{productInfo['productId']}")
+    if not os.path.exists(collectionDir):
+        os.makedirs(collectionDir)
+    
+    # If this is the yaml file describing the collection, make a subdir and copy the yaml over.
+    if re.match(rf"{productInfo['sessionId']}_.*Collection_{productInfo['productId']}\.yaml$", os.path.basename(f)):
+        shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
+    # Otherwise it's just a file in the collection and goes inside the subdir.
+    else:
+        shutil.copyfile(f, os.path.join(collectionDir, os.path.basename(f)))
 
 # We loop through all the products putting each on the screen.  Each product will be placed in an expander.
 for productId, productInfo in productsDict.items():
@@ -144,20 +167,22 @@ for productId, productInfo in productsDict.items():
                 productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f), key=f)
             if ext == '.txt':
                 productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f))
-            shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
+            # shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
+            copy_file_to_output(f, bundleDir, productId, productInfo)
 
 # TODO: Update yamls and text files with edits the user made.
-
-def create_archive(bundleDir, sessionId):
-    original_dir = os.getcwd()
-    os.chdir(bundleDir)
-    command = f"7z a -tzip -mx=9 -mmt={os.cpu_count()} {sessionId}.zip {sessionId}"
-    subprocess.run(command, shell=True)
-    os.chdir(original_dir)
 
 # def create_archive(input_dir, output_zip):
 #     command = f"7z a -tzip -mx=9 -mmt={os.cpu_count()} {output_zip} {input_dir}"
 #     subprocess.call(command, shell=True)
+
+def create_archive(bundleDir, sessionId):
+    for root, dirs, _ in os.walk(os.path.join(bundleDir, f'{sessionId}')):
+        for dir in dirs:
+            if dir != root:
+                hf.zip_directory(root, dir)
+                shutil.rmtree(os.path.join(root, dir))
+    hf.zip_directory(bundleDir, f'{sessionId}')
 
 if st.button('Prepare bundle file for download.'):
     # Zip the resulting bundle files only.

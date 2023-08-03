@@ -363,6 +363,7 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
     return productsList
 
 if __name__ == '__main__':
-    #preprocess_all_products('/Users/Zack/Desktop/STXM Example/Track 220 W7 STXM 210620')
-    preprocess_all_products()
+    # tempdir = '/Users/Zack/Dropbox/OSIRIS-REx/BundlizerData/NanoIR' # Mac
+    tempdir = '/home/zack/Dropbox/OSIRIS-REx/BundlizerData/STXM' # Linux
+    preprocess_all_products(os.path.join(tempdir, 'Track 220 W7 STXM 210620'), sessionId=314)
     print ('Done')
