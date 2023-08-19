@@ -66,29 +66,39 @@ for yamlFile in yamlFiles:
     fullName, _ = os.path.splitext(yamlFile)
     pathName = os.path.dirname(fullName) # This is the directory containing the file.
 
-    # Get the sessionId, dataCompenentType and productId out of the yaml name.
-    pattern = re.compile(r'(\d+)_(.*)_(\d+)')
+    # If this is the bundleinfo file, then it should be added as a product.
+    if os.path.basename(yamlFile) == f'{sessionId}_bundleinfo.yaml':
+        productsDict['bundleinfo'] = {'Expander': None, 'Include': True, 'Files': [yamlFile], 'EditText': {}, 
+                               'sessionId': sessionId, 'productId': 'bundleinfo', 'dataComponentType': None}
+
+    # Read the YAML file to check for the presence of the dataComponentType field
+    with open(yamlFile, 'r') as file:
+        yaml_content = yaml.safe_load(file)
+        yamlDataComponentType = yaml_content.get('dataComponentType', None)
+
+    # Get the sessionId and productId out of the yaml name.
+    pattern = re.compile(rf'({re.escape(sessionId)})_(.*)_(\d+)')
     match = pattern.match(os.path.basename(fullName))
     if match:
-        yamlsessionId, yamlDataComponentType, productId = match.groups()
+        yamlsessionId, _, productId = match.groups()
     else:
         if os.path.basename(yamlFile) != f'{sessionId}_bundleinfo.yaml':
             st.write(f'cannot find sessionId, productId in yaml name: {yamlFile}')
         continue
-    
+
     if yamlsessionId != sessionId:
         st.write(f'Invalid session ID from yaml name: sessionId={yamlsessionId}, fileName={yamlFile}')
 
+    # st.write(f'Processing product {productId} from yaml: {os.path.basename(yamlFile)}')
+
     # Construct the regular expression pattern to find all the files in this product.
     # \d+ matches one or more digits, and .* matches any characters (except a newline).
-    pattern = re.compile(rf"{yamlsessionId}_{yamlDataComponentType}_{productId}.*")
-    # pattern = re.compile(rf"\d+_.*_{productId}.*")
-
+    pattern = re.compile(rf"{yamlsessionId}_.*_{productId}.*")
     matchingFiles = []
     for filename in allFiles :
         if pattern.match(os.path.basename(filename)):
             matchingFiles.append(filename)
-
+            # st.write(f'\tAdding {filename}.')
     matchingFiles = sorted(matchingFiles)
 
     # Expander will point to the GUI element which displays all the info about this product on the page.
@@ -145,9 +155,10 @@ def copy_file_to_output(f, bundleDir, productId, productInfo):
 
 # We loop through all the products putting each on the screen.  Each product will be placed in an expander.
 for productId, productInfo in productsDict.items():
-    if productId == f'{sessionId}_bundleinfo.yaml':
-        # The main bundle info file is a special case -- it already has an editor above.
-        continue
+    # if productId == 'bundleinfo':
+    #     # The main bundle info file is a special case -- it already has an editor above.
+    #     copy_file_to_output(f, bundleDir, productId, productInfo)
+    #     continue
     productInfo['Expander'] = st.expander(f'Product: {productId}', expanded=True)
     with productInfo['Expander'] as ex:
         # Future option to include include checkbox.  For now probably not necessary.
@@ -164,7 +175,9 @@ for productId, productInfo in productsDict.items():
             if ext == '.emd':
                 draw_emd(f)
             if ext == '.yaml':
-                productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f), key=f)
+                if productId != 'bundleinfo':
+                    # The main bundle info file is a special case -- it already has an editor above.
+                    productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f), key=f)
             if ext == '.txt':
                 productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f))
             # shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))

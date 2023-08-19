@@ -129,7 +129,8 @@ def preprocess_irb(fileName=None, sessionId=None, statusOutput=print, samisData=
 def preprocess_axz(fileName=None, sessionId=None, statusOutput=print, haadf=None, samisData=None):
     productId = new_productId()
 
-    return
+    productName = f"{sessionId}_nanoIRMapCollection_{productId:05d}"
+    statusOutput(f'Producing data product {productName}.')
 
     file = anasys.read(fileName)
 
@@ -155,64 +156,6 @@ def preprocess_axz(fileName=None, sessionId=None, statusOutput=print, haadf=None
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
     with open(yamlFileName, 'w') as f:
         yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
-
-    # Create emd file from bcf.
-    emdFileName = os.path.join(os.path.dirname(fileName), f'{productName}.emd')
-    emd = h5py.File(emdFileName, 'w')
-    emd.attrs['version_major'] = 0
-    emd.attrs['version_minor'] = 2
-    emd_data = emd.create_group('data')
-
-    emd_eds = emd_data.create_group('EDS')
-    emd_eds.attrs['emd_group_type'] = 1
-    eds_data = emd_eds.create_dataset('EDS', eds.data.shape, dtype='float', compression='gzip', compression_opts=7)
-    eds_data[:] = eds.data
-
-    dim = emd_eds.create_dataset(f'dim1', (eds.data.shape[0],1))
-    dim[:,0] = eds.axes_manager['height'].axis
-    dim.attrs['name'] = np.string_('height')
-    dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['height'].units))
-
-    dim = emd_eds.create_dataset(f'dim2', (eds.data.shape[1],1))
-    dim[:,0] = eds.axes_manager['width'].axis
-    dim.attrs['name'] = np.string_('width')
-    dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['width'].units))
-
-    dim = emd_eds.create_dataset(f'dim3', (eds.data.shape[2],1))
-    dim[:,0] = eds.axes_manager['Energy'].axis
-    dim.attrs['name'] = np.string_('Energy')
-    dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['Energy'].units))
-
-    eds_metadata = emd_eds.create_group('microscope') # metadata for haadf image
-    for k, v in core_metadata.items():
-        eds_metadata.attrs[k] = v
-    for k, v in hf.flatten_dict(eds.metadata.as_dictionary()).items():
-        if type(v) in [bool, str, int, float]:
-            eds_metadata.attrs[k] = v
-
-    emd_haadf = emd_data.create_group('HAADF')
-    emd_haadf.attrs['emd_group_type'] = 1
-    haadf_data = emd_haadf.create_dataset('HAADF', haadf.data.shape, dtype='float', compression='gzip', compression_opts=7)
-    haadf_data[:] = haadf.data
-
-    dim = emd_haadf.create_dataset(f'dim1', (haadf.data.shape[0],1))
-    dim[:,0] = haadf.axes_manager['height'].axis
-    dim.attrs['name'] = np.string_('height')
-    dim.attrs['units'] = np.string_(hf.replace_greek_symbols(haadf.axes_manager['height'].units))
-
-    dim = emd_haadf.create_dataset(f'dim2', (haadf.data.shape[1],1))
-    dim[:,0] = haadf.axes_manager['width'].axis
-    dim.attrs['name'] = np.string_('width')
-    dim.attrs['units'] = np.string_(hf.replace_greek_symbols(haadf.axes_manager['width'].units))
-
-    haadf_metadata = emd_haadf.create_group('microscope') # metadata for haadf image
-    for k, v in core_metadata.items():
-        haadf_metadata.attrs[k] = v
-    for k, v in hf.flatten_dict(haadf.metadata.as_dictionary()).items():
-        if type(v) in [bool, str, int, float]:
-            haadf_metadata.attrs[k] = v
-
-    emd.close()
 
     return
 
@@ -272,7 +215,7 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
 if __name__ == '__main__':
     # preprocess_all_products()
     # preprocess_one_product(fileName='/home/zack/Rocket/WorkDir/BundlizerData/20230503 - TitanX - Tagish Lake Stub 3 Lamella 1 bundlizer/0001_0000_1.ser', sessionId=314, statusOutput=print)
-    # tempdir = '/Users/Zack/Desktop' # Mac
+    # tempdir = '/Users/Zack/Dropbox/OSIRIS-REx/BundlizerData/NanoIR' # Mac
     tempdir = '/home/zack/Dropbox/OSIRIS-REx/BundlizerData/NanoIR' # Linux
     preprocess_all_products(os.path.join(tempdir, '20221205 - NanoIR Tapping - IOM - ORExSAT - Murchison B_1'), sessionId=314)
     print ('Done')

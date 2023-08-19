@@ -275,7 +275,8 @@ def write_ome_tif_image(fileName, sessionId, productId, img, core_metadata, addl
     yamlFileName = os.path.join(os.path.dirname(fileName), f"{sessionId}_instrumentMetadata_{productId:05d}.ome.yaml")
     with open(yamlFileName, 'w') as f:
         suppYaml = {"description": core_metadata['description'],
-                    "supDocType": core_metadata['dataComponentType'],
+                    "supDocType": 'instrumentMetadata',
+                    # "supDocType": core_metadata['dataComponentType'],
                     "associatedFiles": [f'{productName}.ome.tif']}
                     # "associatedFiles": f'{sessionId}_instrumentMetadata_{productId:05d}.ome.txt'}
         yaml.dump(suppYaml, f, default_flow_style=False, sort_keys=False)
