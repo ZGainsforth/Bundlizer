@@ -36,6 +36,11 @@ if not os.path.exists(bundleDir):
 bdd = pd.read_csv(os.path.join('Config', 'BDD.csv'))
 # Load people data
 people = pd.read_csv(os.path.join('Config', 'People.csv'))
+people['name'] =  people["firstName"] + ' ' + people["lastName"]
+people.loc[people['lastName']=='None', 'name'] = 'None'
+people.loc[people['lastName']=='None', 'lastName'] = 'aaa'
+people = people.sort_values('lastName')
+people.reset_index(drop=True, inplace=True)
 
 title = st.text_input("Title")
 abstract = st.text_area("Abstract")
