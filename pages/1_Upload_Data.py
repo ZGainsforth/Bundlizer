@@ -49,6 +49,8 @@ else:
 
 # Unzip the data we are going to process
 if uploadFile is not None:
+    # Clean out the raw dir (upload overwrites it)
+    shutil.rmtree(rawDir)
     with zipfile.ZipFile(BytesIO(uploadFile.read()), 'r') as zip_ref:
         zip_ref.extractall(rawDir)  # extracts all files into the bundle directory
 

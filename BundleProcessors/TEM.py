@@ -94,6 +94,7 @@ def write_TEM_image(fileName=None, sessionId=None, statusOutput=print, img=None,
         "pixelScaleX": core_metadata['PhysicalSizeX'],
         "pixelScaleY": core_metadata['PhysicalSizeY'],
         "pixelUnits": core_metadata['PhysicalSizeXUnit'],
+        "channel1": "Intensity"
         }
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.ome.yaml')
     with open(yamlFileName, 'w') as f:
@@ -176,10 +177,10 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
     yamlData = { 
         "description": core_metadata['description'],
         "dataComponentType": core_metadata['dataComponentType'],
+        "dimensions": [] # This will be populated as we go.
         }
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
-    with open(yamlFileName, 'w') as f:
-        yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
+    # We don't actually save the yaml yet, because it needs some info from the bcf populated into it.
 
     # Create emd file from bcf.
     emdFileName = os.path.join(os.path.dirname(fileName), f'{productName}.emd')
@@ -197,16 +198,19 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
     dim[:,0] = eds.axes_manager['height'].axis
     dim.attrs['name'] = np.string_('height')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['height'].units))
+    yamlData['dimensions'].append({'fieldDescription:':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eds.create_dataset(f'dim2', (eds.data.shape[1],1))
     dim[:,0] = eds.axes_manager['width'].axis
     dim.attrs['name'] = np.string_('width')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['width'].units))
+    yamlData['dimensions'].append({'fieldDescription:':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eds.create_dataset(f'dim3', (eds.data.shape[2],1))
     dim[:,0] = eds.axes_manager['Energy'].axis
     dim.attrs['name'] = np.string_('Energy')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['Energy'].units))
+    yamlData['dimensions'].append({'fieldDescription:':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     eds_metadata = emd_eds.create_group('microscope') # metadata for haadf image
     for k, v in core_metadata.items():
@@ -238,6 +242,11 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
             haadf_metadata.attrs[k] = v
 
     emd.close()
+
+    # Save the yaml now that we have all the data.
+    with open(yamlFileName, 'w') as f:
+        yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
+
 
     return
 
