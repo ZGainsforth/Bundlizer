@@ -198,19 +198,19 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
     dim[:,0] = eds.axes_manager['height'].axis
     dim.attrs['name'] = np.string_('height')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['height'].units))
-    yamlData['dimensions'].append({'fieldDescription:':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eds.create_dataset(f'dim2', (eds.data.shape[1],1))
     dim[:,0] = eds.axes_manager['width'].axis
     dim.attrs['name'] = np.string_('width')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['width'].units))
-    yamlData['dimensions'].append({'fieldDescription:':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eds.create_dataset(f'dim3', (eds.data.shape[2],1))
     dim[:,0] = eds.axes_manager['Energy'].axis
     dim.attrs['name'] = np.string_('Energy')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['Energy'].units))
-    yamlData['dimensions'].append({'fieldDescription:':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     eds_metadata = emd_eds.create_group('microscope') # metadata for haadf image
     for k, v in core_metadata.items():
