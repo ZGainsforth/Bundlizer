@@ -35,10 +35,9 @@ if not os.path.exists(bundleDir):
 # Select a BDD and instrument.
 bdd = pd.read_csv(os.path.join('Config', 'BDD.csv'))
 # Load people data
-people = pd.read_csv(os.path.join('Config', 'People.csv'))
+people = pd.read_csv(os.path.join('Config', 'People.csv'), keep_default_na=False)
 people['name'] =  people["firstName"] + ' ' + people["lastName"]
-people.loc[people['lastName']=='None', 'name'] = 'None'
-people.loc[people['lastName']=='None', 'lastName'] = 'aaa'
+people.loc[people['lastName']=='AAAA', 'name'] = 'None'
 people = people.sort_values('lastName')
 people.reset_index(drop=True, inplace=True)
 

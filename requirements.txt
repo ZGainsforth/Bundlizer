@@ -1,0 +1,13 @@
+numpy
+streamlit
+pandas
+hyperspy
+h5py
+streamlit_extras
+glob2
+pyyaml
+ncempy
+matplotlib
+scikit-image
+tifffile
+streamlit-ace
