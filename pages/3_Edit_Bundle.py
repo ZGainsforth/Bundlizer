@@ -12,6 +12,7 @@ import tifffile
 import matplotlib.pyplot as plt
 import numpy as np
 import helperfuncs as hf
+import hyperspy.api as hs
 
 st.markdown("# View/Edit bundle file and raw products")
 st.markdown("The user can view a data bundle and add/remove products here.")
@@ -112,6 +113,16 @@ for yamlFile in yamlFiles:
 productsDict = dict(sorted(productsDict.items()))
 
 @st.cache_data
+def draw_msa(f):
+    msa = hs.load(f)
+    fig = plt.figure()
+    ax = fig.gca()
+    ax.plot(msa.axes_manager[0].axis, msa.data)
+    ax.set_xlabel(msa.axes_manager[0].units)
+    ax.set_ylabel(msa.metadata.Signal.quantity)
+    st.pyplot(fig)
+
+@st.cache_data
 def draw_tiff(f):
     img = tifffile.imread(f)
     # If this is an image stack, then average into an image for display.
@@ -172,7 +183,11 @@ for productId, productInfo in productsDict.items():
             if ext == '.tif':
                 st.write(f"\t{os.path.basename(f)}")
                 draw_tiff(f)
+            if ext == '.msa':
+                st.write(f"\t{os.path.basename(f)}")
+                draw_msa(f)
             if ext == '.emd':
+                st.write(f"\t{os.path.basename(f)}")
                 draw_emd(f)
             if ext == '.yaml':
                 if productId != 'bundleinfo':

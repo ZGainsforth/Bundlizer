@@ -155,6 +155,15 @@ def create_emd(fileName=None):
     return emd
 
 #  def emd_add_cube(emd=None, groupName=None, )
+
+def h5_attrs_to_dict(attrs):
+    for key in attrs.keys():
+        if attrs[key].dtype == object:
+            attrsDict[key] = str(attrs[key])
+        else:
+            attrsDict[key] = np.array(attrs[key])[0]
+    return attrsDict
+
 '''--------------- INIT FUNCTIONS ---------------'''
 
 # We want to create directories for processing data.

@@ -71,7 +71,7 @@ def preprocess_irb(fileName=None, sessionId=None, statusOutput=print, samisData=
     productName = f"{sessionId}_nanoIRPointCollection_{productId:05d}"
     statusOutput(f'Producing data product {productName}.')
 
-   # Get any information in the user's csv for SAMIS.
+    # Get any information in the user's csv for SAMIS.
     samisDict = hf.samis_dict_for_this_file(samisData, fileName, statusOutput)
     description = samisDict.get('description', '')
 
