@@ -10,6 +10,7 @@ import yaml
 from yaml.representer import SafeRepresenter
 import importlib
 import subprocess
+import h5py
 
 '''--------------- GENERAL FUNCTIONS ---------------'''
 
@@ -145,6 +146,13 @@ def zip_directory(rootDir, subDir):
     subprocess.run(command, shell=True)
     os.chdir(original_dir)
 
+def NumpyToYaml(arr):
+    with np.printoptions(linewidth=np.inf):
+        s = np.array2string(arr, separator=', ', formatter={'float': lambda x: str(x)})
+        # remove the brackets []
+        s = s[1:-1]
+    return s
+
 
 '''--------------- EMD FUNCTIONS ---------------'''
 
@@ -156,6 +164,7 @@ def create_emd(fileName=None):
 
 #  def emd_add_cube(emd=None, groupName=None, )
 
+# Converts an attrs list in h5 to a dictionary (see also h5_node_to_dict).
 def h5_attrs_to_dict(attrs):
     for key in attrs.keys():
         if attrs[key].dtype == object:
@@ -163,6 +172,20 @@ def h5_attrs_to_dict(attrs):
         else:
             attrsDict[key] = np.array(attrs[key])[0]
     return attrsDict
+
+# Converts all the datasets in the current node into a dictionary.
+def h5_node_to_dict(node):
+    nodeDict = {}
+    for key in node.keys():
+        if isinstance(node[key], h5py.Group):
+            nodeDict[key] = h5_node_to_dict(node[key])
+            continue
+        # Add this dataset into the dictinary
+        if node[key].dtype == object:
+            nodeDict[key] = node[key][0].decode('utf-8')
+        else:
+            nodeDict[key] = np.array(node[key])[0].item()
+    return flatten_dict(nodeDict)
 
 '''--------------- INIT FUNCTIONS ---------------'''
 

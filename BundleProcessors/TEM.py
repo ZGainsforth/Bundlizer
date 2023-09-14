@@ -131,7 +131,7 @@ def write_TEM_image(fileName=None, sessionId=None, statusOutput=print, img=None,
     if core_metadata['dataComponentType'] == 'TEMPatternsImage':
         calibrationFileName = os.path.splitext(fileName)[0] + ".pdf"
         try:
-            shutil.copyfile(calibrationFileName, f"{sessionId}_calibrationFile_{productId:05d}.ome.pdf")
+            shutil.copyfile(calibrationFileName, os.path.join(os.path.dirname(fileName), f"{sessionId}_calibrationFile_{productId:05d}.ome.pdf"))
         except Exception as e:
             statusOutput(f'Could not find calibration file {calibrationFileName}.')
 
@@ -262,8 +262,8 @@ def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, 
     write_TEM_image(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file.data.astype('float32'), core_metadata=core_metadata, addl_metadata=file.metadata.as_dictionary())
     return
 
-# Preprocess Bruker EDS cube.
 def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None, eds=None, samisData=None):
+    # Preprocess Bruker EDS cube.
     productId = new_productId()
 
     # Get any information in the user's csv for SAMIS.
@@ -357,24 +357,8 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
 
     return
 
-# Converts all the datasets in the current node (non-recursively) into a dictionary.
-def h5_node_to_dict(node):
-    nodeDict = {}
-    for key in node.keys():
-        # Don't recurse.
-        if isinstance(node[key], h5py.Group):
-            nodeDict[key] = h5_node_to_dict(node[key])
-            continue
-
-        # Add this dataset into the dictinary
-        if node[key].dtype == object:
-            nodeDict[key] = node[key][0].decode('utf-8')
-        else:
-            nodeDict[key] = np.array(node[key])[0].item()
-    return hf.flatten_dict(nodeDict)
-
-# Process Oxford EDS info.
 def preprocess_h5oina(fileName=None, sessionId=None, statusOutput=print, samisData=None):
+    # Process Oxford EDS info.
     productId = new_productId()
     baseName = os.path.basename(fileName)
     fileNameNoExt, _ = os.path.splitext(fileName)
@@ -410,9 +394,9 @@ def preprocess_h5oina(fileName=None, sessionId=None, statusOutput=print, samisDa
     # Extract metadata from the .h5oina file
     edsHeader = h5oina['1']['EDS']['Header']
     # edsMetadata = {key: edsHeader[key][()] for key in edsHeader.keys()}
-    edsMetadata = h5_node_to_dict(edsHeader)
+    edsMetadata = hf.h5_node_to_dict(edsHeader)
     imageHeader = h5oina['1']['Electron Image']['Header']
-    imageMetadata = h5_node_to_dict(imageHeader)
+    imageMetadata = hf.h5_node_to_dict(imageHeader)
     # imageMetadata = {key: imageHeader[key][()] for key in imageHeader.keys()}
 
     # Create emd file from bcf.
@@ -504,20 +488,21 @@ def preprocess_msa(fileName=None, sessionId=None, statusOutput=print, samisData=
         "headerRowCount":headerRowCount,
         "countColumns":countColumns,
         "countRows":msa.axes_manager[0].size,
-        "columns": {
-            "1": {
+        "columns": [
+            {
+             "colNum":1,
              "label":msa.axes_manager[0].units,
              "fieldDescription":"Energy axis",
              "fieldType":"decimal",
              "unitOfMeasure":msa.axes_manager[0].units,
-            },
-            "2": {
+            }, {
+             "colNum":2,
              "label":msa.metadata.Signal.quantity,
              "fieldDescription":"Intensity",
              "fieldType":"decimal",
              "unitOfMeasure":msa.metadata.Signal.quantity,
             }
-        },
+        ],
     }
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
     with open(yamlFileName, 'w') as f:
@@ -527,7 +512,6 @@ def preprocess_msa(fileName=None, sessionId=None, statusOutput=print, samisData=
     shutil.copy(fileName, os.path.join(os.path.dirname(fileName), f'{productName}.msa'))
 
     return
-
 
 def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print, samisData=None):
     # In the case of STXM, all products are pointed to by a hdr file.

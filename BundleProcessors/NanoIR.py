@@ -99,20 +99,21 @@ def preprocess_irb(fileName=None, sessionId=None, statusOutput=print, samisData=
         "headerRowCount":3,
         "countColumns":2,
         "countRows":len(energies),
-        "columns": {
-            "1": {
+        "columns": [
+            {
+             "colNum":1,
              "label":"cm-1",
              "fieldDescription":"Energy axis in wavenumbers",
              "fieldType":"decimal",
              "unitOfMeasure":"cm-1",
-            },
-            "2": {
+            }, {
+             "colNum":2,
              "label":nodes['Units'],
              "fieldDescription":"Intensity",
              "fieldType":"decimal",
              "unitOfMeasure":nodes['Units'],
             }
-        },
+        ],
     }
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
     with open(yamlFileName, 'w') as f:

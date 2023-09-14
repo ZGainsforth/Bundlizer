@@ -11,6 +11,8 @@ from PIL import Image
 import pandas as pd
 import glob2
 import yaml
+import importlib
+hf = importlib.import_module('helperfuncs', '..')
 
 def SaveTifStack(FileName, Stack):
     try:
@@ -233,13 +235,6 @@ def PlotStack(Region, Energies, AxisName):
     # And pass it back out.
     return Sum, im
 
-def NumpyToYaml(arr):
-    with np.printoptions(linewidth=np.inf):
-        s = np.array2string(arr, separator=', ', formatter={'float': lambda x: str(x)})
-        # remove the brackets []
-        s = s[1:-1]
-    return s
-
 def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
     # In the case of STXM, all products are pointed to by a hdr file.
     # Extract the file name.
@@ -310,17 +305,17 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
             "dimensions": [
                 {
                     "dimension": "X",
-                    "fieldDescription": NumpyToYaml(Xim[f'Region{n}_X']),
+                    "fieldDescription": hf.NumpyToYaml(Xim[f'Region{n}_X']),
                     "unitOfMeasure": "um",
                 },
                 {
                     "dimension": "Y",
-                    "fieldDescription": NumpyToYaml(Xim[f'Region{n}_Y']),
+                    "fieldDescription": hf.NumpyToYaml(Xim[f'Region{n}_Y']),
                     "unitOfMeasure": "um",
                 },
                 {
                     "dimension": "Z",
-                    "fieldDescription": NumpyToYaml(Xim['Energies']),
+                    "fieldDescription": hf.NumpyToYaml(Xim['Energies']),
                     "unitOfMeasure": "eV",
                 },
             ]
