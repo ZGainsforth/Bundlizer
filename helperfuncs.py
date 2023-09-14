@@ -142,7 +142,7 @@ def zip_directory(rootDir, subDir):
     original_dir = os.getcwd()
     os.chdir(rootDir)
     # command = f"7z a -tzip -mx=9 -mmt={os.cpu_count()} {subDir}.zip {subDir}"
-    command = f"zip -r -{os.cpu_count()} {subDir}.zip {subDir}"
+    command = f'zip -r -{os.cpu_count()} "{subDir}.zip" "{subDir}"'
     subprocess.run(command, shell=True)
     os.chdir(original_dir)
 

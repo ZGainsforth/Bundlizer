@@ -152,17 +152,24 @@ def copy_file_to_output(f, bundleDir, productId, productInfo):
         shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
         return
 
-    # Well it is a collection, make a subdir to put the files in inside the collection.
-    collectionDir = os.path.join(bundleDir, f"{productInfo['sessionId']}_{productInfo['dataComponentType']}_{productInfo['productId']}")
-    if not os.path.exists(collectionDir):
-        os.makedirs(collectionDir)
-    
-    # If this is the yaml file describing the collection, make a subdir and copy the yaml over.
-    if re.match(rf"{productInfo['sessionId']}_.*Collection_{productInfo['productId']}\.yaml$", os.path.basename(f)):
-        shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
-    # Otherwise it's just a file in the collection and goes inside the subdir.
-    else:
-        shutil.copyfile(f, os.path.join(collectionDir, os.path.basename(f)))
+    # It is a collection.  There should be a yaml and a directory with files in it.
+    # We will only process this if it is the yaml.
+    RootName, ext = os.path.splitext(f)
+    if (ext != '.yaml') and (ext != '.yml'):
+        # It's not a yaml so move on.  This file will get collected when we handle the yaml.
+        return
+    # One more check: is there a subdirectory with the same name (there could be yamls inside the collection).
+    if not os.path.isdir(RootName):
+        # There isn't a directory with the same name so it isn't a yaml describing a collection.  It's a yaml *in* a collection.
+        return
+
+    # This is the yaml so we will zip up the directory with the same name.
+    # RootName = os.path.abspath(RootName)
+    shutil.make_archive(RootName, 'zip', RootName)
+    # hf.zip_directory(os.path.join(RootName, '..'), RootName)
+    # And we copy both the yaml and the zip to the output.
+    shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
+    shutil.copyfile(RootName + '.zip', os.path.join(bundleDir, os.path.basename(RootName))+'.zip')
 
 # We loop through all the products putting each on the screen.  Each product will be placed in an expander.
 for productId, productInfo in productsDict.items():

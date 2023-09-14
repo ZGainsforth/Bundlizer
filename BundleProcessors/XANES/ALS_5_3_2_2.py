@@ -261,8 +261,16 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
             raise ValueError(f"{Xim['Type']} is an invalid data product type.")
     ProductDict = {}
 
-    # the first file is a yaml describing the data collection.
     ProductName = f'{sessionId}_{dataComponentType}_{ProductID}'
+
+    # Data collections need to go into a subdirectory so they can be zipped up later.
+    if dataComponentType == 'XANESCollection':
+        DataPath = os.path.join(PathName, ProductName)
+        os.makedirs(DataPath , exist_ok=True)  # Create the subdirectory if it doesn't exist
+    else:
+        DataPath  = PathName
+
+    # the first file is a yaml describing the data collection.
     yamlData = {
         "description": "default description",
         "dataComponentType": dataComponentType,
@@ -277,26 +285,17 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
         SubProductName = f'{ProductName}_{RegionName}'
         ProductFiles = [] # We don't know all the files yet.  Append as we go.
 
-        # In stacks there is a region name since they often are multi-region.
-        # if Xim['Type'] == 'Image':
-        #     PlotName = 'Plot'
-        # else:
         PlotName = f'Region{n}_Plot'
 
         # Save a user friendly plot image.
-        FriendlyPlotFileName = os.path.join(PathName, f'{SubProductName}.png')
+        FriendlyPlotFileName = os.path.join(DataPath , f'{SubProductName}.png')
         Xim[PlotName].save(FriendlyPlotFileName)
         ProductFiles.append(FriendlyPlotFileName)
 
         # Save the raw data as tif.
-        TifFileName = os.path.join(PathName, f'{SubProductName}.tif')
+        TifFileName = os.path.join(DataPath , f'{SubProductName}.tif')
         SaveTifStack(TifFileName, Xim[RegionName])
         ProductFiles.append(TifFileName)
-
-        # # Save the energy axis.
-        # EnergyFileName = os.path.join(PathName, f'{SubProductName}.txt')
-        # np.savetxt(EnergyFileName, Xim['Energies'])
-        # ProductFiles.append(EnergyFileName)
 
         # Now put all the data together to make a yaml with the metadata 
         yamlData = {
@@ -320,7 +319,7 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
                 },
             ]
         }
-        yamlFileName = os.path.join(PathName, f'{SubProductName}.yaml')
+        yamlFileName = os.path.join(DataPath , f'{SubProductName}.yaml')
         # statusOutput(f'Generating yaml file: {yamlFileName}')
         with open(yamlFileName, 'w') as f:
             yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
