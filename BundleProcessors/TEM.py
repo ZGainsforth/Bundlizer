@@ -205,19 +205,19 @@ def preprocess_dmeels(fileName=None, sessionId=None, statusOutput=print, file=No
     dim[:,0] = file.axes_manager['y'].axis
     dim.attrs['name'] = np.string_('Height')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(file.axes_manager['y'].units))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'X', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eels.create_dataset(f'dim2', (file.data.shape[1],1))
     dim[:,0] = file.axes_manager['x'].axis
     dim.attrs['name'] = np.string_('Width')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(file.axes_manager['x'].units))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'Y', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eels.create_dataset(f'dim3', (file.data.shape[2],1))
     dim[:,0] = file.axes_manager['Energy loss'].axis
     dim.attrs['name'] = np.string_('Energy loss')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(file.axes_manager['Energy loss'].units))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'Z', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     eels_metadata = emd_eels.create_group('microscope') # metadata for eels
     for k, v in core_metadata.items():
@@ -306,19 +306,19 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
     dim[:,0] = eds.axes_manager['height'].axis
     dim.attrs['name'] = np.string_('Height')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['height'].units))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'X', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eds.create_dataset(f'dim2', (eds.data.shape[1],1))
     dim[:,0] = eds.axes_manager['width'].axis
     dim.attrs['name'] = np.string_('Width')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['width'].units))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'Y', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eds.create_dataset(f'dim3', (eds.data.shape[2],1))
     dim[:,0] = eds.axes_manager['Energy'].axis
     dim.attrs['name'] = np.string_('Energy')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['Energy'].units))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'Z', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     eds_metadata = emd_eds.create_group('microscope') # metadata for eds
     for k, v in core_metadata.items():
@@ -433,20 +433,20 @@ def preprocess_h5oina(fileName=None, sessionId=None, statusOutput=print, samisDa
     dim[:,0] = [edsMetadata['Start Channel'] + i * edsMetadata['Channel Width'] for i in range(edsMetadata['Number Channels'])]
     dim.attrs['name'] = np.string_('Energy')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols('eV'))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'X', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eds.create_dataset(f'dim2', (rpl.data.shape[1],1))
     dim[:,0] = np.linspace(0, edsMetadata['Y Step'], edsMetadata['Y Cells'])
     # dim[:,0] = np.linspace(0, np.array(h5oina['1']['EDS']['Header']['Y Step'][0]), np.array(h5oina['1']['EDS']['Header']['Y Cells'][0]))
     dim.attrs['name'] = np.string_('Height')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols('um'))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'Y', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     dim = emd_eds.create_dataset(f'dim3', (rpl.data.shape[2],1))
     dim[:,0] = np.linspace(0, edsMetadata['X Step'], edsMetadata['X Cells'])
     dim.attrs['name'] = np.string_('Width')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols('um'))
-    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+    yamlData['dimensions'].append({'dimension':'Z', 'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
     emd_edsMetadata = emd_eds.create_group('microscope') # metadata for eds
     for k, v in core_metadata.items():
