@@ -47,16 +47,24 @@ def get_image_type(metadata=None):
 
 def plot_emd(fileName):
     with h5py.File(fileName, 'r') as emd:
-        # Load EDS data
-        eds_data = np.array(emd['data']['EDS']['EDS'])
+        
+        match emd.attrs['data_type']:
+            case 'EDSCube':
+                # Load EDS data
+                data = np.array(emd['data']['EDS']['EDS'])
+                node = emd['data']['EDS']
+                friendlyName = 'EDS'
+            case 'EELSCube':
+                data = np.array(emd['data']['EELS']['EELS'])
+                node = emd['data']['EELS']
+                friendlyName = 'EELS'
+            case _:
+                raise ValueError(f'{emd.attrs["data_type"]} is not currently a supported emd type for plotting.')
 
         # Get axes information
-        dim1 = emd['data']['EDS']['dim1']
-        dim2 = emd['data']['EDS']['dim2']
-        dim3 = emd['data']['EDS']['dim3']
-        # dim1 = np.array(emd['data']['EDS']['dim1'])[:, 0]
-        # dim2 = np.array(emd['data']['EDS']['dim2'])[:, 0]
-        # dim3 = np.array(emd['data']['EDS']['dim3'])[:, 0]
+        dim1 = node['dim1']
+        dim2 = node['dim2']
+        dim3 = node['dim3']
         
         for n,d in {0:dim1, 1:dim2, 2:dim3}.items():
             match d.attrs['name'].decode('utf-8'):
@@ -64,31 +72,31 @@ def plot_emd(fileName):
                     x = n; xdim = d
                 case 'Height':
                     y = n; ydim = d
-                case 'Energy':
+                case 'Energy' | 'Energy loss':
                     e = n; edim = d
                 case _:
                     raise ValueError(f"Invalid dimension name {d.attrs['name'].decode('utf-8')}.")
 
         # Create sum over energy axis (2D image)
-        sum_image = np.sum(eds_data, axis=e)
+        sum_image = np.sum(data, axis=e)
 
         # Create mean and max over spatial dimensions (spectrum)
-        spectrum = np.mean(eds_data, axis=(x,y))
-        spectrum_max = np.max(eds_data, axis=(x,y))
+        spectrum = np.mean(data, axis=(x,y))
+        spectrum_max = np.max(data, axis=(x,y))
 
         # Create the figure and axes using plt.subplots
         fig, axs = plt.subplots(2, 1, figsize=(6, 9)) 
 
         # Plot 2D image
         im = axs[0].imshow(sum_image, cmap='gray', extent=[ydim[0][0], ydim[-1][0], xdim[0][0], xdim[-1][0]])
-        axs[0].set_title('EDS stack sum image')
+        axs[0].set_title(f'{friendlyName} stack sum image')
         axs[0].set_ylabel(ydim.attrs['name'].decode() + ' (' + ydim.attrs['units'].decode() + ')')
         axs[0].set_xlabel(xdim.attrs['name'].decode() + ' (' + xdim.attrs['units'].decode() + ')')
 
         # Plot spectrum
         axs[1].plot(edim, spectrum)
         axs[1].plot(edim, spectrum_max)
-        axs[1].set_title('EDS stack spectrum')
+        axs[1].set_title(f'{friendlyName} stack spectrum')
         axs[1].set_xlabel(edim.attrs['name'].decode() + ' (' + edim.attrs['units'].decode() + ')')
         axs[1].set_ylabel('Counts')
         axs[1].legend(['Mean value', 'Max value'])
@@ -147,7 +155,90 @@ def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None,
     write_TEM_image(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file['data'][:,:].astype('float32'), core_metadata=core_metadata, addl_metadata=file['metadata'])
     return
 
+def preprocess_dmeels(fileName=None, sessionId=None, statusOutput=print, file=None, samisData=None):
+    # Get any information in the user's csv for SAMIS.
+    samisDict = hf.samis_dict_for_this_file(samisData, fileName, statusOutput)
+    description = samisDict.get('description', '')
+
+    dataComponentType = 'STEMEELSCube'
+
+    core_metadata = { 
+        "description": f"{os.path.basename(fileName)}: {description}" if description else os.path.basename(fileName),
+        "dataComponentType": dataComponentType,
+        "PhysicalSizeX": float(file.axes_manager['x'].scale),
+        "PhysicalSizeXUnit": hf.replace_greek_symbols(file.axes_manager['x'].units),
+        "PhysicalSizeY": float(file.axes_manager['y'].scale),
+        "PhysicalSizeYUnit": hf.replace_greek_symbols(file.axes_manager['y'].units),
+        "PhysicalSizeE": float(file.axes_manager['Energy loss'].scale),
+        "PhysicalSizeEUnit": hf.replace_greek_symbols(file.axes_manager['Energy loss'].units),
+        "PhysicalSizeEOffset": float(file.axes_manager['Energy loss'].offset),
+        }
+    # Add any metadata from samisData for this product.
+    hf.union_dict_no_overwrite(core_metadata, hf.sanitize_dict_for_yaml(samisDict))
+
+    productName = f"{sessionId}_{dataComponentType}_{productId:05d}"
+    statusOutput(f'Producing data product {productName}.')
+
+    # Make a yaml describing this data product.
+    yamlData = { 
+        "description": core_metadata['description'],
+        "dataComponentType": core_metadata['dataComponentType'],
+        "dimensions": [] # This will be populated as we go.
+        }
+    yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.yaml')
+    # We don't actually save the yaml yet, because it needs some info from the bcf populated into it.
+
+    # Create emd file from the EELS data.
+    emdFileName = os.path.join(os.path.dirname(fileName), f'{productName}.emd')
+    emd = h5py.File(emdFileName, 'w')
+    emd.attrs['version_major'] = 0
+    emd.attrs['version_minor'] = 2
+    emd.attrs['data_type'] = 'EELSCube'
+    emd_data = emd.create_group('data')
+
+    emd_eels = emd_data.create_group('EELS')
+    emd_eels.attrs['emd_group_type'] = 1
+    eels_data = emd_eels.create_dataset('EELS', file.data.shape, dtype='float', compression='gzip', compression_opts=7)
+    eels_data[:] = file.data
+
+    dim = emd_eels.create_dataset(f'dim1', (file.data.shape[0],1))
+    dim[:,0] = file.axes_manager['y'].axis
+    dim.attrs['name'] = np.string_('Height')
+    dim.attrs['units'] = np.string_(hf.replace_greek_symbols(file.axes_manager['y'].units))
+    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+
+    dim = emd_eels.create_dataset(f'dim2', (file.data.shape[1],1))
+    dim[:,0] = file.axes_manager['x'].axis
+    dim.attrs['name'] = np.string_('Width')
+    dim.attrs['units'] = np.string_(hf.replace_greek_symbols(file.axes_manager['x'].units))
+    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+
+    dim = emd_eels.create_dataset(f'dim3', (file.data.shape[2],1))
+    dim[:,0] = file.axes_manager['Energy loss'].axis
+    dim.attrs['name'] = np.string_('Energy loss')
+    dim.attrs['units'] = np.string_(hf.replace_greek_symbols(file.axes_manager['Energy loss'].units))
+    yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
+
+    eels_metadata = emd_eels.create_group('microscope') # metadata for eels
+    for k, v in core_metadata.items():
+        eels_metadata.attrs[k] = v
+    for k, v in hf.flatten_dict(file.metadata.as_dictionary()).items():
+        if type(v) in [bool, str, int, float]:
+            eels_metadata.attrs[k] = v
+
+    emd.close()
+
+    # Save the yaml now that we have all the data.
+    with open(yamlFileName, 'w') as f:
+        yaml.dump(yamlData, f, default_flow_style=False, sort_keys=False)
+
+    return
+
 def preprocess_dm(fileName=None, sessionId=None, statusOutput=print, file=None, samisData=None):
+    if file._signal_type == 'EELS':
+        preprocess_dmeels(fileName, sessionId, statusOutput, file, samisData)
+        return
+    
     # Get any information in the user's csv for SAMIS.
     samisDict = hf.samis_dict_for_this_file(samisData, fileName, statusOutput)
     description = samisDict.get('description', '')
@@ -203,6 +294,7 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
     emd = h5py.File(emdFileName, 'w')
     emd.attrs['version_major'] = 0
     emd.attrs['version_minor'] = 2
+    emd.attrs['data_type'] = 'EDSCube'
     emd_data = emd.create_group('data')
 
     emd_eds = emd_data.create_group('EDS')
@@ -228,7 +320,7 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(eds.axes_manager['Energy'].units))
     yamlData['dimensions'].append({'fieldDescription':dim.attrs['name'].decode('utf-8'), 'unitOfMeasure': dim.attrs['units'].decode('utf-8')})
 
-    eds_metadata = emd_eds.create_group('microscope') # metadata for haadf image
+    eds_metadata = emd_eds.create_group('microscope') # metadata for eds
     for k, v in core_metadata.items():
         eds_metadata.attrs[k] = v
     for k, v in hf.flatten_dict(eds.metadata.as_dictionary()).items():
@@ -241,12 +333,12 @@ def preprocess_bcf(fileName=None, sessionId=None, statusOutput=print, haadf=None
     haadf_data[:] = haadf.data
 
     dim = emd_haadf.create_dataset(f'dim1', (haadf.data.shape[0],1))
-    dim[:,0] = haadf.axes_manager['Height'].axis
+    dim[:,0] = haadf.axes_manager['height'].axis
     dim.attrs['name'] = np.string_('Height')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(haadf.axes_manager['height'].units))
 
     dim = emd_haadf.create_dataset(f'dim2', (haadf.data.shape[1],1))
-    dim[:,0] = haadf.axes_manager['Width'].axis
+    dim[:,0] = haadf.axes_manager['width'].axis
     dim.attrs['name'] = np.string_('width')
     dim.attrs['units'] = np.string_(hf.replace_greek_symbols(haadf.axes_manager['width'].units))
 
@@ -328,6 +420,7 @@ def preprocess_h5oina(fileName=None, sessionId=None, statusOutput=print, samisDa
     emd = h5py.File(emdFileName, 'w')
     emd.attrs['version_major'] = 0
     emd.attrs['version_minor'] = 2
+    emd.attrs['data_type'] = 'EDSCube'
     emd_data = emd.create_group('data')
 
     emd_eds = emd_data.create_group('EDS')
