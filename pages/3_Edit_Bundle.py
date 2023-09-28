@@ -145,6 +145,15 @@ def draw_emd(f):
     fig = st.session_state['instrumentProcessor'].plot_emd(f)
     st.pyplot(fig)
 
+# @st.cache_data
+def draw_zip(f, productInfo):
+    match productInfo['dataComponentType']:
+        case 'NanoSIMSImageCollection':
+            fig = st.session_state['instrumentProcessor'].plot_im(f)
+        case _:
+            st.write(f'Error plotting {f}')
+    st.pyplot(fig)
+
 def copy_file_to_output(f, bundleDir, productId, productInfo):
     # Most files in the bundle just get copied to the root of the bundle.
     # Collections are the exception.
@@ -196,14 +205,17 @@ for productId, productInfo in productsDict.items():
             if ext == '.emd':
                 st.write(f"\t{os.path.basename(f)}")
                 draw_emd(f)
+            if ext == '.zip':
+                st.write(f"\t{os.path.basename(f)}")
+                draw_zip(f, productInfo)
             if ext == '.yaml':
                 if productId != 'bundleinfo':
                     # The main bundle info file is a special case -- it already has an editor above.
                     productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f), key=f)
             if ext == '.txt':
                 productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f))
-            # shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
-            copy_file_to_output(f, bundleDir, productId, productInfo)
+            shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
+            # copy_file_to_output(f, bundleDir, productId, productInfo)
 
 # TODO: Update yamls and text files with edits the user made.
 
