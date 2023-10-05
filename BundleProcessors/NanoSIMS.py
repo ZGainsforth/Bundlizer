@@ -96,6 +96,9 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print, sa
     baseName = os.path.basename(fullName) # This is the name of the file.
     pathName = os.path.dirname(fullName) # This is the directory containing the file.
 
+    # Get any samis data specific to this product (it could be in a subdir with additional samis info.)
+    samisData = hf.load_samisdata(os.path.dirname(fileName), samisData, statusOutput)
+
     match ext:
         case '.im':
             preprocess_im(fileName, sessionId, statusOutput, samisData)
@@ -114,13 +117,15 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
         rawFiles.extend(glob2.glob(os.path.join(dirName, '**', f'*.{ext}')))
     rawFiles.sort()
 
-    # If there is a csv with additional metadata fields supplied by the user then load it.  Ususally this is used for descriptions.
-    try:
-        samisData = pd.read_csv(os.path.join(dirName, 'samisdata.csv'))
-        statusOutput('Loaded metadata from samisdata.csv.')
-    except:
-        samisData = None
-        statusOutput('There is no samisdata.csv.  Where are your descriptions going to come from?  Consider making a csv...')
+    # Load the base samisData.
+    samisData = hf.load_samisdata(dirName, None, statusOutput)
+    # # If there is a csv with additional metadata fields supplied by the user then load it.  Ususally this is used for descriptions.
+    # try:
+    #     samisData = pd.read_csv(os.path.join(dirName, 'samisdata.csv'))
+    #     statusOutput('Loaded metadata from samisdata.csv.')
+    # except:
+    #     samisData = None
+    #     statusOutput('There is no samisdata.csv.  Where are your descriptions going to come from?  Consider making a csv...')
 
     for i, f in enumerate(rawFiles):
         try:

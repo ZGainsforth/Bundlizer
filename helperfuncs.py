@@ -187,6 +187,31 @@ def h5_node_to_dict(node):
             nodeDict[key] = np.array(node[key])[0].item()
     return flatten_dict(nodeDict)
 
+def load_samisdata(dirName, existingSamisData=None, statusOutput=print):
+    # If there is a csv with additional metadata fields supplied by the user then load it.  Ususally this is used for descriptions.
+    try:
+        samisData = pd.read_csv(os.path.join(dirName, 'samisdata.csv'))
+        statusOutput('Loaded metadata from samisdata.csv.')
+    except:
+        samisData = None
+
+    # Merge samis data with the existing samis data based on the 'filename' field.
+    if existingSamisData is not None:
+        if samisData is not None:
+            # Perform an outer merge on the 'filename' field
+            samisData = pd.merge(samisData, existingSamisData, how='outer', on='filename')
+            # Replace all NaN values with empty strings
+            samisData.fillna('', inplace=True)
+        else:
+            samisData = existingSamisData
+    
+    # If there is no samis data of any kind, let the user know.
+    if samisData is None:
+        statusOutput('There is no samisdata.csv.  Where are your descriptions going to come from?  Consider making a csv...')
+
+    # return the merged or original samisData.
+    return samisData
+
 '''--------------- INIT FUNCTIONS ---------------'''
 
 # We want to create directories for processing data.
