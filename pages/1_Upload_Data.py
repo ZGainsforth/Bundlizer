@@ -41,18 +41,20 @@ if not os.path.exists(rawDir):
 
 # Get a zip file from the user with his raw files, and unzip them on the server.
 uploadFile = st.file_uploader(f"Please upload a zip file containing instrument data.") #, type=["zip"])
+# st.write(uploadFile)
 
 if uploadFile is None:
     st.stop()
-else:
-    st.session_state['uploadFile'] = uploadFile
 
-# Unzip the data we are going to process
-if uploadFile is not None:
+# Unzip the data we are going to process if this was just uploaded.
+# if st.session_state['uploadFile'] is not None:
+if 'uploadFile' not in st.session_state or st.session_state['uploadFile'] != uploadFile:
     # Clean out the raw dir (upload overwrites it)
     shutil.rmtree(rawDir)
     with zipfile.ZipFile(BytesIO(uploadFile.read()), 'r') as zip_ref:
         zip_ref.extractall(rawDir)  # extracts all files into the bundle directory
+    # Note that this has been uploaded so that we don't try to unzip again on a page reprocess.
+    st.session_state['uploadFile'] = uploadFile
 
 # Check if there is already a bundle file.
 bundleinfoFileName = os.path.join(rawDir, f'{sessionId}_bundleinfo.yaml')

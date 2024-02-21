@@ -78,7 +78,9 @@ def plot_emd(fileName):
                     raise ValueError(f"Invalid dimension name {d.attrs['name'].decode('utf-8')}.")
 
         # Create sum over energy axis (2D image)
-        sum_image = np.sum(data, axis=e)
+        startIndex = np.argmin((np.array(edim)-0.1)**2) # Start the sum image after 100 eV (skip the pulse peak at 0).
+        # sum_image = np.sum(data, axis=e)
+        sum_image = np.sum(np.take(data, indices=range(startIndex, data.shape[e]), axis=e), axis=e)
 
         # Create mean and max over spatial dimensions (spectrum)
         spectrum = np.mean(data, axis=(x,y))
@@ -480,6 +482,7 @@ def preprocess_msa(fileName=None, sessionId=None, statusOutput=print, samisData=
 
     # In order to get the metadata for the yaml we need to read the msa.
     msa = hs.load(fileName)
+    msa.set_signal_type('EDS_TEM')
 
     # Create and save the yaml file for this spectrum.
     yamlData = { 

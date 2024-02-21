@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import re
 import os
+import shutil
 import io
 import gc
 from PIL import Image
@@ -251,6 +252,7 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
         case 'Stack':
             dataComponentType = 'XANESCollection'
         case 'Image':
+            # TODO HERE!!! CONVERT SINGLE IMAGES TO COLLECTIONS 
             dataComponentType = 'XANESImage'
         # These are todo.
         # case 'LinescanRaw':
@@ -326,6 +328,11 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
         ProductFiles.append(yamlFileName)
 
         ProductDict.update({SubProductName: ProductFiles})
+
+    # TODO HERE!!! ALL COLLECTIONS GET ZIPPED
+    # Create a zip file for the directory
+    shutil.make_archive(f'{os.path.join(os.path.dirname(fileName), "..", productName)}', 'zip', os.path.dirname(fileName))
+
 
     return ProductDict
 
