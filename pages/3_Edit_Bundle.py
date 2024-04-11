@@ -150,9 +150,12 @@ def draw_zip(f, productInfo):
     match productInfo['dataComponentType']:
         case 'NanoSIMSImageCollection':
             fig = st.session_state['instrumentProcessor'].plot_im(f)
+            st.pyplot(fig)
+        case 'XANESCollection':
+            fig = st.session_state['instrumentProcessor'].plot_pngs_from_zip(f)
+            st.pyplot(fig)
         case _:
-            st.write(f'Error plotting {f}')
-    st.pyplot(fig)
+            st.write(f'{f} is of type {productInfo["dataComponentType"]}')
 
 def copy_file_to_output(f, bundleDir, productId, productInfo):
     # Most files in the bundle just get copied to the root of the bundle.
@@ -214,7 +217,8 @@ for productId, productInfo in productsDict.items():
                     productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f), key=f)
             if ext == '.txt':
                 productInfo['EditText'][f] = productInfo['Expander'].text_area(label=f'{os.path.basename(f)}:', value=load_textfile(f))
-            shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
+            if os.path.isfile(f):
+                shutil.copyfile(f, os.path.join(bundleDir, os.path.basename(f)))
             # copy_file_to_output(f, bundleDir, productId, productInfo)
 
 # TODO: Update yamls and text files with edits the user made.

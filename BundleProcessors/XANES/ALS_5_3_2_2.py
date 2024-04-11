@@ -8,10 +8,12 @@ import os
 import shutil
 import io
 import gc
+import time
 from PIL import Image
 import pandas as pd
 import glob2
 import yaml
+import zipfile
 import importlib
 hf = importlib.import_module('helperfuncs', '..')
 
@@ -54,6 +56,14 @@ def ReadXim(XimName):
     with open(hdrName, 'r') as f:
         hdr = f.read()
 
+    # Find which scan type this is.
+    RegionsMatch = re.search('Type = "([A-Za-z ]*)', hdr)
+    try:
+        ScanType = str(RegionsMatch.group(1))
+    except:
+        print ('Could not get scan type from hdr file.')
+        return None
+
     # Find out how many regions there are.
     RegionsMatch = re.search('Regions = \(([0-9]*),', hdr)
     try:
@@ -64,7 +74,10 @@ def ReadXim(XimName):
 
     # Find out the energ(ies).  Look in the StackAxis section for the entry Points = (numbers);
     # Pull out numbers.
-    EnergyMatch = re.search('StackAxis.*?Points = \((.*?)\);', hdr, re.S)
+    if ScanType.lower() != 'nexafs line scan':
+        EnergyMatch = re.search('StackAxis.*?Points = \((.*?)\);', hdr, re.S)
+    else:
+        EnergyMatch = re.search('PAxis.*?Points = \((.*?)\);', hdr, re.S)
 
     # Convert the text numbers into energies.
     try:
@@ -153,49 +166,64 @@ def ReadXim(XimName):
             Xim[f'Region{n}_Y'] = yAxisRegions[n-1]
             Xim[f'Region{n}_Image'], Xim[f'Region{n}_Plot'] = PlotMap(PreEdge, PostEdge, Xim['Energies'], AxisName)
     else:
-        Xim['Type'] = 'Stack'
+        # With multiple energies, it's either a line scan or a stack.
+        if ScanType.lower() == 'nexafs line scan':
+            Xim['Type'] = 'Linescan'
+            # Filenames for linescans depend on whether it is multi-region or not.
+            for n in range(1, NumRegions+1):
+                if NumRegions > 1:
+                    Xim[f'Region{n}'] = np.loadtxt(BaseName + '_a%01d.xim'%(n-1), dtype='uint16')
+                # For single region
+                else:
+                    Xim[f'Region{n}'] = np.loadtxt(BaseName + '_a.xim', dtype='uint16')
+                Xim[f'Region{n}_Image'] = Xim[f'Region{n}'] 
+                Xim[f'Region{n}_X'] = xAxisRegions[n-1]
+                Xim[f'Region{n}_Y'] = yAxisRegions[n-1]
+                Xim[f'Region{n}_Plot'] = PlotImage(Xim[f'Region{n}'], AxisName + f'_Region{n}: %0.2f-%0.2f eV'%(Xim['Energies'][0], Xim['Energies'][-1]))
+        else:
+            Xim['Type'] = 'Stack'
 
-        # Load each region into Xim.
-        for n in range(1, NumRegions+1):
-            # Name this one.
-            # RegionName = 'Region%d'%n
-            FirstFrame = np.loadtxt(BaseName + ExtensionStr%(n-1), dtype='uint16')
+            # Load each region into Xim.
+            for n in range(1, NumRegions+1):
+                # Name this one.
+                # RegionName = 'Region%d'%n
+                FirstFrame = np.loadtxt(BaseName + ExtensionStr%(n-1), dtype='uint16')
 
-            # Allocate the numpy array.
-            ThisRegion = np.zeros((len(Xim['Energies']), FirstFrame.shape[0], FirstFrame.shape[1]), dtype='uint16')
-            # Put in the one frame we already loaded.
-            ThisRegion[0] = FirstFrame
-            # Loop for each of the remaining frames.
-            for i in range(1, len(Xim['Energies'])):
-                # Read in one frame and store it.
-                try:
-                    # We're doing this with pandas read_csv because it is so fast.
-                    # n-1 gives us the region number, i-1 gives us the frame number.  NumberIncrement gives us the jumps between frames.
-                    # e.g. region 1, frame 1 = 0, region 1, frame 2 = 10, region 2 frame 2 = 11, region 2 frame 3 = 21, etc.
-                    t = pd.read_csv(BaseName + ExtensionStr%((n-1)+(i-1)*NumberIncrement), sep='\t', header=None)
-                    # But Tolek has a \t at the end of the line and Pandas reads in a last column of NaNs.  So ditch
-                    # the last col.
-                    ThisRegion[i] = t.values[:,:-1]
-                except IOError:
-                    # It is common that stacks will be truncated.  In this case, we will fail at reading some file.
-                    # Lets trunctate the stack here.
-                    Xim['Energies'] = Xim['Energies'][:i]
-                    ThisRegion = ThisRegion[:i]
-                    # Done.  Go to next region.
-                    break
+                # Allocate the numpy array.
+                ThisRegion = np.zeros((len(Xim['Energies']), FirstFrame.shape[0], FirstFrame.shape[1]), dtype='uint16')
+                # Put in the one frame we already loaded.
+                ThisRegion[0] = FirstFrame
+                # Loop for each of the remaining frames.
+                for i in range(1, len(Xim['Energies'])):
+                    # Read in one frame and store it.
+                    try:
+                        # We're doing this with pandas read_csv because it is so fast.
+                        # n-1 gives us the region number, i-1 gives us the frame number.  NumberIncrement gives us the jumps between frames.
+                        # e.g. region 1, frame 1 = 0, region 1, frame 2 = 10, region 2 frame 2 = 11, region 2 frame 3 = 21, etc.
+                        t = pd.read_csv(BaseName + ExtensionStr%((n-1)+(i-1)*NumberIncrement), sep='\t', header=None)
+                        # But Tolek has a \t at the end of the line and Pandas reads in a last column of NaNs.  So ditch
+                        # the last col.
+                        ThisRegion[i] = t.values[:,:-1]
+                    except IOError:
+                        # It is common that stacks will be truncated.  In this case, we will fail at reading some file.
+                        # Lets trunctate the stack here.
+                        Xim['Energies'] = Xim['Energies'][:i]
+                        ThisRegion = ThisRegion[:i]
+                        # Done.  Go to next region.
+                        break
 
-            # Store it.
-            # Xim[RegionName] = ThisRegion
-            Xim[f'Region{n}'] = ThisRegion
-            Xim[f'Region{n}_X'] = xAxisRegions[n-1]
-            Xim[f'Region{n}_Y'] = yAxisRegions[n-1]
-            Xim[f'Region{n}_Image'], Xim[f'Region{n}_Plot'] = PlotStack(Xim[f'Region{n}'], Xim['Energies'], AxisName+f'_Region{n}')
+                # Store it.
+                # Xim[RegionName] = ThisRegion
+                Xim[f'Region{n}'] = ThisRegion
+                Xim[f'Region{n}_X'] = xAxisRegions[n-1]
+                Xim[f'Region{n}_Y'] = yAxisRegions[n-1]
+                Xim[f'Region{n}_Image'], Xim[f'Region{n}_Plot'] = PlotStack(Xim[f'Region{n}'], Xim['Energies'], AxisName+f'_Region{n}')
 
-            # # And generate "pretty images" i.e. thumbnails.
-            # ThisAxisName = AxisName
-            # if NumRegions > 1:
-            #     ThisAxisName = AxisName + '_Region%d'%n
-            # Xim['Image'+RegionName], Xim['Plot'+RegionName] = PlotStack(Xim[RegionName], Xim['Energies'], AxisName)
+                # # And generate "pretty images" i.e. thumbnails.
+                # ThisAxisName = AxisName
+                # if NumRegions > 1:
+                #     ThisAxisName = AxisName + '_Region%d'%n
+                # Xim['Image'+RegionName], Xim['Plot'+RegionName] = PlotStack(Xim[RegionName], Xim['Energies'], AxisName)
 
     return Xim
 
@@ -236,6 +264,32 @@ def PlotStack(Region, Energies, AxisName):
     # And pass it back out.
     return Sum, im
 
+def plot_pngs_from_zip(zipFileName):
+    # Read ZIP file
+    with zipfile.ZipFile(zipFileName, 'r') as z:
+        png_names = [name for name in z.namelist() if name.lower().endswith('.png')]
+        
+        # Calculate the number of subplots assuming a square shape.
+        n = len(png_names)
+        ncols = int(np.ceil(np.sqrt(n)))
+        fig, ax = plt.subplots(nrows=ncols, ncols=ncols, figsize=(8, 8))
+        if n > 1:
+            ax = ax.ravel()
+        else:
+            ax = [ax]
+
+        for i, png_name in enumerate(png_names):
+            with z.open(png_name) as png_file:
+                png_data = plt.imread(io.BytesIO(png_file.read()))
+                ax[i].imshow(png_data)
+                ax[i].axis('off')
+
+        for i in range(n, ncols**2):
+            ax[i].axis('off')
+
+        plt.tight_layout()
+    return fig  
+
 def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
     # In the case of STXM, all products are pointed to by a hdr file.
     # Extract the file name.
@@ -252,8 +306,9 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
         case 'Stack':
             dataComponentType = 'XANESCollection'
         case 'Image':
-            # TODO HERE!!! CONVERT SINGLE IMAGES TO COLLECTIONS 
-            dataComponentType = 'XANESImage'
+            dataComponentType = 'XANESCollection'
+        case 'Linescan':
+            dataComponentType = 'XANESCollection'
         # These are todo.
         # case 'LinescanRaw':
         #     dataComponentType = 'XANESRawTabular'
@@ -265,7 +320,7 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
 
     ProductName = f'{sessionId}_{dataComponentType}_{ProductID}'
 
-    # Data collections need to go into a subdirectory so they can be zipped up later.
+    # Data collections need to go into a subdirectory so they can be zipped up.
     if dataComponentType == 'XANESCollection':
         DataPath = os.path.join(PathName, ProductName)
         os.makedirs(DataPath , exist_ok=True)  # Create the subdirectory if it doesn't exist
@@ -300,27 +355,46 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
         ProductFiles.append(TifFileName)
 
         # Now put all the data together to make a yaml with the metadata 
-        yamlData = {
-            "description": "default description",
-            "dataComponentType": dataComponentType,
-            "dimensions": [
-                {
-                    "dimension": "X",
-                    "fieldDescription": hf.NumpyToYaml(Xim[f'Region{n}_X']),
-                    "unitOfMeasure": "um",
-                },
-                {
-                    "dimension": "Y",
-                    "fieldDescription": hf.NumpyToYaml(Xim[f'Region{n}_Y']),
-                    "unitOfMeasure": "um",
-                },
-                {
-                    "dimension": "Z",
-                    "fieldDescription": hf.NumpyToYaml(Xim['Energies']),
-                    "unitOfMeasure": "eV",
-                },
-            ]
-        }
+        if Xim['Type'] != 'Linescan':
+            # Yaml for all the image based types has x/y/z dimensions.
+            yamlData = {
+                "description": "default description",
+                "dataComponentType": dataComponentType,
+                "dimensions": [
+                    {
+                        "dimension": "X",
+                        "fieldDescription": hf.NumpyToYaml(Xim[f'Region{n}_X']),
+                        "unitOfMeasure": "um",
+                    },
+                    {
+                        "dimension": "Y",
+                        "fieldDescription": hf.NumpyToYaml(Xim[f'Region{n}_Y']),
+                        "unitOfMeasure": "um",
+                    },
+                    {
+                        "dimension": "Z",
+                        "fieldDescription": hf.NumpyToYaml(Xim['Energies']),
+                        "unitOfMeasure": "eV",
+                    },
+                ]
+            }
+        else: # Linescans don't have z dimension.
+            yamlData = {
+                "description": "default description",
+                "dataComponentType": dataComponentType,
+                "dimensions": [
+                    {
+                        "dimension": "X",
+                        "fieldDescription": hf.NumpyToYaml(Xim[f'Region{n}_X']),
+                        "unitOfMeasure": "eV",
+                    },
+                    {
+                        "dimension": "Y",
+                        "fieldDescription": hf.NumpyToYaml(Xim[f'Region{n}_Y']),
+                        "unitOfMeasure": "um",
+                    },
+                ]
+            }
         yamlFileName = os.path.join(DataPath , f'{SubProductName}.yaml')
         # statusOutput(f'Generating yaml file: {yamlFileName}')
         with open(yamlFileName, 'w') as f:
@@ -329,12 +403,26 @@ def preprocess_one_product(fileName=None, sessionId=None, statusOutput=print):
 
         ProductDict.update({SubProductName: ProductFiles})
 
-    # TODO HERE!!! ALL COLLECTIONS GET ZIPPED
     # Create a zip file for the directory
-    shutil.make_archive(f'{os.path.join(os.path.dirname(fileName), "..", productName)}', 'zip', os.path.dirname(fileName))
-
+    shutil.make_archive(DataPath, 'zip', DataPath)
+    # Delete the directory.
+    gc.collect()
+    robust_rmtree(DataPath)
 
     return ProductDict
+
+def robust_rmtree(path, max_attempts=5, delay_between_attempts=1):
+    """Attempt to delete a directory tree multiple times, with sleeping between attempts."""
+    for attempt in range(max_attempts):
+        try:
+            shutil.rmtree(path)
+            print('Removed directory: %s' % path)
+            break  # If successful, exit the loop
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed with error: {e}")
+            time.sleep(delay_between_attempts)
+    else:
+        print(f"Failed to remove {path} after {max_attempts} attempts.")
 
 def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, statusProgress=None):
     # The user is telling us a directory which contains raw products from this instrument.
@@ -365,6 +453,7 @@ def preprocess_all_products(dirName=None, sessionId=None, statusOutput=print, st
 
 if __name__ == '__main__':
     # tempdir = '/Users/Zack/Dropbox/OSIRIS-REx/BundlizerData/NanoIR' # Mac
-    tempdir = '/home/zack/Dropbox/OSIRIS-REx/BundlizerData/STXM' # Linux
-    preprocess_all_products(os.path.join(tempdir, 'Track 220 W7 STXM 210620'), sessionId=314)
+    # tempdir = '/home/zack/Dropbox/OSIRIS-REx/BundlizerData/STXM' # Linux
+    tempdir = '/mnt/d/WorkDir/Bundles' # Linux
+    preprocess_all_products(os.path.join(tempdir, 'test'), sessionId=314)
     print ('Done')
