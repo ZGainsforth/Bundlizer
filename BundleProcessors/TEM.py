@@ -90,7 +90,7 @@ def plot_emd(fileName):
         fig, axs = plt.subplots(2, 1, figsize=(6, 9)) 
 
         # Plot 2D image
-        im = axs[0].imshow(sum_image, cmap='gray', extent=[ydim[0][0], ydim[-1][0], xdim[0][0], xdim[-1][0]])
+        im = axs[0].imshow(sum_image, cmap='gray', extent=[xdim[0][0], xdim[-1][0], ydim[0][0], ydim[-1][0]])
         axs[0].set_title(f'{friendlyName} stack sum image')
         axs[0].set_ylabel(ydim.attrs['name'].decode() + ' (' + ydim.attrs['units'].decode() + ')')
         axs[0].set_xlabel(xdim.attrs['name'].decode() + ' (' + xdim.attrs['units'].decode() + ')')
@@ -117,9 +117,9 @@ def write_TEM_image(fileName=None, sessionId=None, statusOutput=print, img=None,
     yamlData = { 
         "description": core_metadata['description'],
         "dataComponentType": core_metadata['dataComponentType'],
-        "pixelScaleX": core_metadata['PhysicalSizeX'],
-        "pixelScaleY": core_metadata['PhysicalSizeY'],
-        "pixelUnits": core_metadata['PhysicalSizeXUnit'],
+        "pxScaleX": core_metadata['PhysicalSizeX'],
+        "pxScaleY": core_metadata['PhysicalSizeY'],
+        "pxUnits": hf.correct_unit_names(core_metadata['PhysicalSizeXUnit']),
         "channel1": "Intensity"
         }
     yamlFileName = os.path.join(os.path.dirname(fileName), f'{productName}.ome.yaml')
@@ -153,6 +153,8 @@ def preprocess_ser(fileName=None, sessionId=None, statusOutput=print, file=None,
         }
     # Add any metadata from samisData for this product.
     hf.union_dict_no_overwrite(core_metadata, hf.sanitize_dict_for_yaml(samisDict))
+    if file.get('metadata') == None:
+        file['metadata'] = {}
 
     write_TEM_image(fileName=fileName, sessionId=sessionId, statusOutput=statusOutput, img=file['data'][:,:].astype('float32'), core_metadata=core_metadata, addl_metadata=file['metadata'])
     return

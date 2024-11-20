@@ -10,7 +10,14 @@
             "type": "python",
             "request": "launch",
             "module": "streamlit",
-            "args": ["run", "Bundlizer_Overview.py"]
+            "args": ["run", "Bundlizer_Overview.py"],
+            "justMycode": false,
+            "pathMappings": [
+                {
+                    "localRoot": "C:\\Users\\zsg\\Dropbox\\OSIRIS-REx\\Bundlizer", // The path of your project on the Windows side
+                    "remoteRoot": "/home/zack/Dropbox/OSIRIS-REx/Bundlizer" // The equivalent path in WSLI"
+                }
+            ]
         }
     ]
 }

@@ -100,6 +100,24 @@ def ome_to_resolution_cm(metadata):
 def replace_greek_symbols(input_string):
     return input_string.replace("µ", "u").replace("Å", "A") 
 
+def correct_unit_names(unit=None):
+    if unit == 'm':
+        return 'meter'
+    if unit == 'dm':
+        return 'decimeter'
+    if unit == 'cm':
+        return 'centimeter'
+    if unit == 'mm':
+        return 'millimeter'
+    if unit == 'um':
+        return 'micrometer'
+    if unit == 'nm':
+        return 'nanometer'
+    if unit == 'pm':
+        return 'picometer'
+    else:
+        return unit
+
 # Look through the samisdata.csv file and find the row that matches this file if it is present.
 def samis_dict_for_this_file(samisData=None, fileName=None, statusOutput=print):
     # If there is no info then we need to use an empty dict.
